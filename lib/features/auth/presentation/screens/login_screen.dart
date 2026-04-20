@@ -225,51 +225,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                   const SizedBox(height: 40),
 
-                  // -- Dummy user hint (hapus saat production) --
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.wrnDarkInput,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: AppColors.wrnShapePurple.withOpacity(0.4),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          '🧪 Dummy Login (hapus saat production)',
-                          style: TextStyle(
-                            color: AppColors.wrnLightPurple,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        ..._dummyUsers.map(
-                          (u) => GestureDetector(
-                            onTap: () {
-                              _usernameController.text = u.username;
-                              _passwordController.text = u.password;
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 3),
-                              child: Text(
-                                '${u.role.toUpperCase()}  →  ${u.username} / ${u.password}',
-                                style: const TextStyle(
-                                  color: AppColors.textGrey,
-                                  fontSize: 11,
-                                  fontFamily: 'monospace',
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
                   const SizedBox(height: 20),
 
                   // Login button

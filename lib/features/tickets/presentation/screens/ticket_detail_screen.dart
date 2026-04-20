@@ -34,7 +34,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
     super.dispose();
   }
 
-  // -- Update Status (admin/helpdesk) --
+  // ── Update Status (admin/helpdesk) ────────────────────────────
 
   void _showUpdateStatusSheet(TicketDetail ticket) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -131,136 +131,159 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
     showModalBottomSheet(
       context: context,
       backgroundColor: isDark ? AppColors.wrnDarkInput : Colors.white,
+      isScrollControlled:
+          true, // penting agar bisa pakai DraggableScrollableSheet
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.4),
-                  borderRadius: BorderRadius.circular(2),
-                ),
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.35,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (_, scrollController) => Column(
+          children: [
+            // Handle + judul (fixed, tidak ikut scroll)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Column(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withOpacity(0.4),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Assign ke Helpdesk',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 4,
-                ),
-                child: Text(
-                  'Assign ke Helpdesk',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: cs.onSurface,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              // Opsi unassign
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.person_off_outlined,
-                    color: Colors.grey,
-                    size: 20,
-                  ),
-                ),
-                title: const Text('Unassign'),
-                subtitle: Text(
-                  'Hapus penugasan saat ini',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: cs.onSurface.withOpacity(0.5),
-                  ),
-                ),
-                onTap: ticket.assigneeName == null
-                    ? null
-                    : () {
-                        Navigator.pop(context);
-                        ref
-                            .read(
-                              ticketDetailProvider(widget.ticketId).notifier,
-                            )
-                            .assignTicket(
-                              const HelpdeskAgent(id: '', name: '', role: ''),
-                            );
-                      },
-              ),
-              const Divider(height: 1, indent: 16, endIndent: 16),
-              ...dummyAgents.map((agent) {
-                final isCurrent = agent.name == ticket.assigneeName;
-                final roleColor = agent.role == 'admin'
-                    ? AppColors.wrnShapeRose
-                    : AppColors.wrnLightPurple;
-                return ListTile(
-                  leading: CircleAvatar(
-                    radius: 18,
-                    backgroundColor: roleColor.withOpacity(0.15),
-                    child: Text(
-                      agent.name[0].toUpperCase(),
-                      style: TextStyle(
-                        color: roleColor,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
+            ),
+            const Divider(height: 1),
+            // Scrollable list
+            Expanded(
+              child: ListView(
+                controller: scrollController,
+                padding: const EdgeInsets.only(bottom: 16),
+                children: [
+                  // Opsi unassign
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.person_off_outlined,
+                        color: Colors.grey,
+                        size: 20,
                       ),
                     ),
-                  ),
-                  title: Text(
-                    agent.name,
-                    style: TextStyle(
-                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
-                      color: isCurrent ? roleColor : cs.onSurface,
+                    title: const Text('Unassign'),
+                    subtitle: Text(
+                      'Hapus penugasan saat ini',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurface.withOpacity(0.5),
+                      ),
                     ),
+                    onTap: ticket.assigneeName == null
+                        ? null
+                        : () {
+                            Navigator.pop(context);
+                            ref
+                                .read(
+                                  ticketDetailProvider(
+                                    widget.ticketId,
+                                  ).notifier,
+                                )
+                                .assignTicket(
+                                  const HelpdeskAgent(
+                                    id: '',
+                                    name: '',
+                                    role: '',
+                                  ),
+                                );
+                          },
                   ),
-                  subtitle: Text(
-                    agent.role.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: roleColor.withOpacity(0.8),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  trailing: isCurrent
-                      ? Icon(
-                          Icons.check_circle_rounded,
-                          color: roleColor,
-                          size: 18,
-                        )
-                      : null,
-                  onTap: isCurrent
-                      ? null
-                      : () {
-                          Navigator.pop(context);
-                          ref
-                              .read(
-                                ticketDetailProvider(widget.ticketId).notifier,
-                              )
-                              .assignTicket(agent);
-                        },
-                );
-              }),
-              const SizedBox(height: 8),
-            ],
-          ),
+                  const Divider(height: 1, indent: 16, endIndent: 16),
+                  ...dummyAgents.map((agent) {
+                    final isCurrent = agent.name == ticket.assigneeName;
+                    final roleColor = agent.role == 'admin'
+                        ? AppColors.wrnShapeRose
+                        : AppColors.wrnLightPurple;
+                    return ListTile(
+                      leading: CircleAvatar(
+                        radius: 18,
+                        backgroundColor: roleColor.withOpacity(0.15),
+                        child: Text(
+                          agent.name[0].toUpperCase(),
+                          style: TextStyle(
+                            color: roleColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        agent.name,
+                        style: TextStyle(
+                          fontWeight: isCurrent
+                              ? FontWeight.bold
+                              : FontWeight.w500,
+                          color: isCurrent ? roleColor : cs.onSurface,
+                        ),
+                      ),
+                      subtitle: Text(
+                        agent.role.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: roleColor.withOpacity(0.8),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      trailing: isCurrent
+                          ? Icon(
+                              Icons.check_circle_rounded,
+                              color: roleColor,
+                              size: 18,
+                            )
+                          : null,
+                      onTap: isCurrent
+                          ? null
+                          : () {
+                              Navigator.pop(context);
+                              ref
+                                  .read(
+                                    ticketDetailProvider(
+                                      widget.ticketId,
+                                    ).notifier,
+                                  )
+                                  .assignTicket(agent);
+                            },
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // -- Submit comment -- //
+  // ── Submit comment ────────────────────────────────────────────
 
   Future<void> _handleSendComment() async {
     final auth = ref.read(authProvider);
@@ -280,7 +303,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
     }
   }
 
-  // -- Build -- //
+  // ── Build ─────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -368,7 +391,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
           : TabBarView(
               controller: _tabController,
               children: [
-                // -- Tab 1: Detail -- //
+                // ── Tab 1: Detail ──
                 _DetailTab(
                   ticket: detailState.ticket!,
                   isDark: isDark,
@@ -376,7 +399,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
                   theme: theme,
                 ),
 
-                // -- Tab 2: Komentar -- //
+                // ── Tab 2: Komentar ──
                 _CommentTab(
                   ticket: detailState.ticket!,
                   auth: auth,
@@ -432,7 +455,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
   }
 }
 
-// -- Tab Detail -- //
+// ── Tab Detail ─────────────────────────────────────────────────
 
 class _DetailTab extends StatelessWidget {
   final TicketDetail ticket;
@@ -457,7 +480,7 @@ class _DetailTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // -- Status + Priority badges -- //
+          // ── Status + Priority badges ──
           Row(
             children: [
               _Badge(
@@ -476,7 +499,7 @@ class _DetailTab extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          // -- Judul -- //
+          // ── Judul ──
           Text(
             ticket.title,
             style: theme.textTheme.titleLarge?.copyWith(
@@ -487,7 +510,7 @@ class _DetailTab extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          // -- Info grid -- //
+          // ── Info grid ──
           _InfoCard(
             isDark: isDark,
             cs: cs,
@@ -518,7 +541,7 @@ class _DetailTab extends StatelessWidget {
 
           const SizedBox(height: 20),
 
-          // -- Deskripsi -- //
+          // ── Deskripsi ──
           Text(
             'Deskripsi',
             style: theme.textTheme.titleSmall?.copyWith(
@@ -548,7 +571,7 @@ class _DetailTab extends StatelessWidget {
             ),
           ),
 
-          // -- Attachments -- //
+          // ── Attachments ──
           if (ticket.attachmentUrls.isNotEmpty) ...[
             const SizedBox(height: 20),
             Text(
@@ -643,7 +666,7 @@ class _DetailTab extends StatelessWidget {
   }
 }
 
-// -- Tab Komentar -- //
+// ── Tab Komentar ───────────────────────────────────────────────
 
 class _CommentTab extends StatelessWidget {
   final TicketDetail ticket;
@@ -674,7 +697,7 @@ class _CommentTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // -- Daftar komentar -- //
+        // ── Daftar komentar ──
         Expanded(
           child: ticket.comments.isEmpty
               ? Center(
@@ -715,7 +738,7 @@ class _CommentTab extends StatelessWidget {
                 ),
         ),
 
-        // -- Input komentar -- //
+        // ── Input komentar ──
         Container(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
           decoration: BoxDecoration(
@@ -823,7 +846,7 @@ class _CommentTab extends StatelessWidget {
   }
 }
 
-// -- Comment Bubble -- //
+// ── Comment Bubble ─────────────────────────────────────────────
 
 class _CommentBubble extends StatelessWidget {
   final TicketComment comment;
@@ -993,7 +1016,7 @@ class _CommentBubble extends StatelessWidget {
   }
 }
 
-// -- Reusable Widgets -- //
+// ── Reusable Widgets ───────────────────────────────────────────
 
 class _Badge extends StatelessWidget {
   final String label;
@@ -1102,7 +1125,7 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-// -- Error State -- //
+// ── Error State ────────────────────────────────────────────────
 
 class _ErrorState extends StatelessWidget {
   final String message;
@@ -1130,7 +1153,7 @@ class _ErrorState extends StatelessWidget {
   }
 }
 
-// -- Internal model helpers -- //
+// ── Internal model helpers ─────────────────────────────────────
 
 class _StatusStyle {
   final String label;

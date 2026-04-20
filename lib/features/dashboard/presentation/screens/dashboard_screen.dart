@@ -8,6 +8,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../tickets/presentation/screens/create_ticket_screen.dart';
 import '../../../tickets/presentation/screens/ticket_detail_screen.dart';
 import '../../../tickets/presentation/screens/ticket_list_screen.dart';
+import '../../../notifications/presentation/screens/notification_screen.dart';
 
 
 class DashboardScreen extends ConsumerWidget {
@@ -95,7 +96,13 @@ class DashboardScreen extends ConsumerWidget {
                             color: cs.onSurface,
                           ),
                           onPressed: () {
-                            // TODO: navigate ke notification screen
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const NotificationScreen(),
+                              ),
+                            );
                           },
                         ),
                         if (data.unreadNotifications > 0)
