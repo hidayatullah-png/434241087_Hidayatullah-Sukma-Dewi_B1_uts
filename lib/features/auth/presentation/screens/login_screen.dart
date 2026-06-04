@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // Import Supabase
 import '../../../../core/theme/app_colors.dart';
 import '../providers/auth_provider.dart';
 import '../../../dashboard/presentation/screens/main_screen.dart';
@@ -8,50 +9,7 @@ import '../../../../core/providers/navigation_provider.dart';
 import 'register_screen.dart';
 import 'reset_password_screen.dart';
 
-// -- Dummy Users --
-// Hapus / ganti dengan API call saat backend sudah siap
-
-class _DummyUser {
-  final String username;
-  final String password;
-  final String name;
-  final String role; // 'user' | 'helpdesk' | 'admin'
-  final String email;
-
-  const _DummyUser({
-    required this.username,
-    required this.password,
-    required this.name,
-    required this.role,
-    required this.email,
-  });
-}
-
-const _dummyUsers = [
-  _DummyUser(
-    username: 'user01',
-    password: 'password123',
-    name: 'Leon S. Kennedy',
-    role: 'user',
-    email: 'leon@example.com',
-  ),
-  _DummyUser(
-    username: 'helpdesk01',
-    password: 'password123',
-    name: 'Annisa Putri Amaliasari',
-    role: 'helpdesk',
-    email: 'ica@example.com',
-  ),
-  _DummyUser(
-    username: 'admin01',
-    password: 'password123',
-    name: 'Hidayatullah Sukma Dewi',
-    role: 'admin',
-    email: 'pacarleon@example.com',
-  ),
-];
-
-// -- Screen --
+// -- Dummy Users Dihapus --
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -75,13 +33,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
-    final username = _usernameController.text.trim();
+    // Catatan: Supabase secara default menggunakan Email untuk login.
+    // Kita anggap input 'username' ini diisi dengan email oleh user.
+    final email = _usernameController.text.trim();
     final password = _passwordController.text;
 
     // Validasi kosong
-    if (username.isEmpty || password.isEmpty) {
+    if (email.isEmpty || password.isEmpty) {
       setState(
-        () => _errorMessage = 'Username dan password tidak boleh kosong',
+        () => _errorMessage = 'Email/Username dan password tidak boleh kosong',
       );
       return;
     }
@@ -91,42 +51,55 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _errorMessage = null;
     });
 
-    // Simulasi network delay
-    await Future.delayed(const Duration(milliseconds: 800));
+    try {
+      // 1. Eksekusi Login ke Supabase
+      final AuthResponse res = await Supabase.instance.client.auth
+          .signInWithPassword(email: email, password: password);
 
-    // Cari user di dummy list
-    final matched = _dummyUsers.where(
-      (u) => u.username == username && u.password == password,
-    );
+      final User? user = res.user;
 
-    if (!mounted) return;
+      if (user != null && mounted) {
+        // 2. Ambil data tambahan (role & nama) dari tabel database
+        // Asumsi kamu punya tabel 'users' untuk menyimpan role & nama.
+        // Jika belum buat tabelnya, kode ini sementara akan memberi nilai default.
+        final userData = await Supabase.instance.client
+            .from('users')
+            .select('name, role')
+            .eq('id', user.id)
+            .maybeSingle();
 
-    if (matched.isEmpty) {
+        final name = userData?['name'] ?? 'User';
+        final role = userData?['role'] ?? 'user';
+
+        // 3. Set auth state via Riverpod
+        ref
+            .read(authProvider.notifier)
+            .setUser(name: name, role: role, email: user.email ?? '');
+
+        // 4. Reset index navigasi ke 0 (menggunakan setIndex dari Notifier baru)
+        ref.read(navIndexProvider.notifier).setIndex(0);
+
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const MainScreen()),
+          (route) => false,
+        );
+      }
+    } on AuthException catch (e) {
+      // Menangkap error spesifik dari Supabase (misal: password salah)
       setState(() {
-        _isLoading = false;
-        _errorMessage = 'Username atau password salah';
+        _errorMessage = e.message;
       });
-      return;
+    } catch (e) {
+      // Menangkap error lainnya (misal: koneksi terputus)
+      setState(() {
+        _errorMessage = 'Terjadi kesalahan. Silakan coba lagi.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
-
-    // Set auth state via Riverpod
-    final user = matched.first;
-    ref
-        .read(authProvider.notifier)
-        .setUser(name: user.name, role: user.role, email: user.email);
-
-    setState(() => _isLoading = false);
-
-    // 1. Reset index navigasi ke 0 (Dashboard) setiap kali login baru
-    ref.read(navIndexProvider.notifier).state = 0;
-
-    // 2. Navigate ke MainScreen (bukan DashboardScreen)
-    if (!mounted) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const MainScreen()),
-      (route) => false,
-    );
   }
 
   @override
@@ -190,7 +163,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   // Username field
                   _buildInputField(
                     controller: _usernameController,
-                    hint: 'Username',
+                    hint: 'Username / Email',
                     icon: Icons.person_outline,
                   ),
 

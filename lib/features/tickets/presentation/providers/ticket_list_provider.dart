@@ -1,7 +1,7 @@
-// lib/features/tickets/presentation/providers/ticket_list_provider.dart
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../auth/domain/entities/ticket.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 
 // -- Filter State --
 
@@ -40,6 +40,7 @@ extension TicketFilterLabel on TicketFilter {
 }
 
 // -- Pagination State ---
+// (SAMA PERSIS, TIDAK DIUBAH)
 
 class TicketListState {
   final List<Ticket> tickets;
@@ -86,12 +87,17 @@ class TicketListState {
 
 // -- Notifier ---
 
-class TicketListNotifier extends StateNotifier<TicketListState> {
-  TicketListNotifier() : super(const TicketListState()) {
-    fetchTickets();
-  }
-
+// 1. Mengubah StateNotifier menjadi Notifier untuk Riverpod v3
+class TicketListNotifier extends Notifier<TicketListState> {
+  final _supabase = Supabase.instance.client;
   static const int _perPage = 8;
+
+  // 2. Menggunakan build()
+  @override
+  TicketListState build() {
+    Future.microtask(() => fetchTickets());
+    return const TicketListState();
+  }
 
   Future<void> fetchTickets({int page = 1, TicketFilter? filter}) async {
     final activeFilter = filter ?? state.activeFilter;
@@ -104,33 +110,62 @@ class TicketListNotifier extends StateNotifier<TicketListState> {
     );
 
     try {
-      // TODO: ganti dengan actual API call
-      // final res = await http.get(Uri.parse(
-      //   '$baseUrl/api/tickets?page=$page&per_page=$_perPage&status=${activeFilter.apiValue ?? ""}',
-      // ));
-      // final json = jsonDecode(res.body);
+      // a. Ambil Role pengguna saat ini untuk memfilter data
+      final authState = ref.read(authProvider);
+      final isRegularUser = authState.role == 'user';
+      final currentUserId = _supabase.auth.currentUser?.id;
 
-      await Future.delayed(const Duration(milliseconds: 600));
+      // b. Bangun Query dasar (HANYA select, JANGAN pakai .order dulu)
+      var query = _supabase
+          .from('tickets')
+          .select(
+            'id, title, description, status, created_at, users!tickets_assignee_id_fkey(name)',
+          );
 
-      // -- Mock data --
-      final allMock = _generateMockTickets();
-      final filtered = activeFilter == TicketFilter.all
-          ? allMock
-          : allMock.where((t) => t.status == activeFilter.apiValue).toList();
+      // c. Terapkan Filter (Harus dilakukan sebelum order/range)
+      if (activeFilter.apiValue != null) {
+        query = query.eq('status', activeFilter.apiValue!);
+      }
 
-      final totalPages = (filtered.length / _perPage).ceil().clamp(1, 999);
-      final start = ((page - 1) * _perPage).clamp(0, filtered.length);
-      final end = (page * _perPage).clamp(0, filtered.length);
-      final pageItems = filtered.sublist(start, end);
+      if (isRegularUser && currentUserId != null) {
+        query = query.eq('user_id', currentUserId);
+      }
+
+      // d. Terapkan Sorting, Pagination, dan Count sekaligus di bagian akhir
+      final start = (page - 1) * _perPage;
+      final end = start + _perPage - 1;
+
+      final response = await query
+          .order('created_at', ascending: false) // Pindahkan order ke sini
+          .range(start, end)
+          .count(CountOption.exact);
+
+      // Ambil total data untuk menghitung total halaman
+      final count = response.count;
+      final totalPages = (count / _perPage).ceil().clamp(1, 999);
+
+      // e. Mapping hasil database ke Model lokal
+      final List<dynamic> data = response.data;
+      final List<Ticket> loadedTickets = data.map((row) {
+        return Ticket(
+          id: row['id'].toString(),
+          title: row['title'] ?? 'Tanpa Judul',
+          description: row['description'] ?? '',
+          status: row['status'] ?? 'open',
+          createdAt: row['created_at'].toString().substring(0, 10),
+          assigneeName: row['users']?['name'],
+        );
+      }).toList();
 
       state = state.copyWith(
-        tickets: pageItems,
+        tickets: loadedTickets,
         currentPage: page,
         totalPages: totalPages,
         isLoading: false,
         isLoadingPage: false,
       );
     } catch (e) {
+      print('Error memuat tiket: $e');
       state = state.copyWith(
         isLoading: false,
         isLoadingPage: false,
@@ -161,141 +196,8 @@ class TicketListNotifier extends StateNotifier<TicketListState> {
 
 // -- Provider ---
 
+// 3. Mengubah StateNotifierProvider menjadi NotifierProvider
 final ticketListProvider =
-    StateNotifierProvider<TicketListNotifier, TicketListState>(
-      (ref) => TicketListNotifier(),
+    NotifierProvider<TicketListNotifier, TicketListState>(
+      () => TicketListNotifier(),
     );
-
-// -- Mock Data Generator ---
-
-List<Ticket> _generateMockTickets() => [
-  const Ticket(
-    id: '1024',
-    title: 'Printer lantai 3 error',
-    description: 'Error code 0x03 saat mencetak dokumen penting',
-    status: 'open',
-    createdAt: '2 jam lalu',
-    assigneeName: null,
-  ),
-  const Ticket(
-    id: '1023',
-    title: 'VPN tidak bisa login',
-    description: 'Authentication Failed setiap kali mencoba connect',
-    status: 'in_progress',
-    createdAt: '5 jam lalu',
-    assigneeName: 'Leon K.',
-  ),
-  const Ticket(
-    id: '1022',
-    title: 'Email tidak bisa kirim attachment',
-    description: 'Error upload file lebih dari 5MB',
-    status: 'resolved',
-    createdAt: '1 hari lalu',
-    assigneeName: 'Annisa P.',
-  ),
-  const Ticket(
-    id: '1021',
-    title: 'Laptop tidak bisa booting',
-    description: 'Layar hitam setelah logo Windows muncul',
-    status: 'open',
-    createdAt: '1 hari lalu',
-    assigneeName: null,
-  ),
-  const Ticket(
-    id: '1020',
-    title: 'Akun SSO terkunci',
-    description: 'Tidak bisa login ke sistem setelah salah password 3 kali',
-    status: 'in_progress',
-    createdAt: '2 hari lalu',
-    assigneeName: 'Sukma D.',
-  ),
-  const Ticket(
-    id: '1019',
-    title: 'Internet lambat di ruang meeting',
-    description: 'Kecepatan download hanya 1 Mbps padahal paket 100 Mbps',
-    status: 'open',
-    createdAt: '2 hari lalu',
-    assigneeName: null,
-  ),
-  const Ticket(
-    id: '1018',
-    title: 'Software CAD tidak bisa dibuka',
-    description: 'Muncul error "License not found" setiap kali launch',
-    status: 'resolved',
-    createdAt: '3 hari lalu',
-    assigneeName: 'Annisa P.',
-  ),
-  const Ticket(
-    id: '1017',
-    title: 'Monitor kedap-kedip',
-    description: 'Layar berkedip setiap beberapa menit sekali',
-    status: 'closed',
-    createdAt: '3 hari lalu',
-    assigneeName: 'Leon K.',
-  ),
-  const Ticket(
-    id: '1016',
-    title: 'Scanner tidak terdeteksi',
-    description: 'Driver sudah di-install tapi device tidak muncul',
-    status: 'open',
-    createdAt: '4 hari lalu',
-    assigneeName: null,
-  ),
-  const Ticket(
-    id: '1015',
-    title: 'Google Meet tidak bisa share screen',
-    description: 'Tombol share screen greyed out di browser Chrome',
-    status: 'in_progress',
-    createdAt: '4 hari lalu',
-    assigneeName: 'Sukma D.',
-  ),
-  const Ticket(
-    id: '1014',
-    title: 'Keyboard wireless tidak responsif',
-    description: 'Beberapa tombol tidak berfungsi meski baterai baru',
-    status: 'resolved',
-    createdAt: '5 hari lalu',
-    assigneeName: 'Leon K.',
-  ),
-  const Ticket(
-    id: '1013',
-    title: 'File server tidak bisa diakses',
-    description: 'Network path tidak ditemukan dari semua komputer divisi',
-    status: 'closed',
-    createdAt: '5 hari lalu',
-    assigneeName: 'Annisa P.',
-  ),
-  const Ticket(
-    id: '1012',
-    title: 'Antivirus expired',
-    description: 'Notifikasi lisensi habis di 5 komputer sekaligus',
-    status: 'open',
-    createdAt: '6 hari lalu',
-    assigneeName: null,
-  ),
-  const Ticket(
-    id: '1011',
-    title: 'Proyektor tidak connect HDMI',
-    description: 'Sudah coba ganti kabel tapi tetap no signal',
-    status: 'resolved',
-    createdAt: '1 minggu lalu',
-    assigneeName: 'Sukma D.',
-  ),
-  const Ticket(
-    id: '1010',
-    title: 'RAM laptop penuh terus',
-    description:
-        'Task manager menunjukkan 95% RAM usage padahal tidak banyak aplikasi',
-    status: 'closed',
-    createdAt: '1 minggu lalu',
-    assigneeName: 'Leon K.',
-  ),
-  const Ticket(
-    id: '1009',
-    title: 'Backup otomatis gagal',
-    description: 'Scheduled backup tidak jalan sejak update sistem minggu lalu',
-    status: 'in_progress',
-    createdAt: '1 minggu lalu',
-    assigneeName: 'Annisa P.',
-  ),
-];

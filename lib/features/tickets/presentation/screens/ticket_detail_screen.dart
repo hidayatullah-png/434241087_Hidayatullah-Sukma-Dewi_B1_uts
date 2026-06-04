@@ -1,5 +1,3 @@
-// lib/features/tickets/presentation/screens/ticket_detail_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -124,7 +122,8 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
     );
   }
 
-  void _showAssignSheet(TicketDetail ticket) {
+  // PERUBAHAN: Menambahkan parameter "agents" yang dikirim dari Provider
+  void _showAssignSheet(TicketDetail ticket, List<HelpdeskAgent> agents) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = Theme.of(context).colorScheme;
 
@@ -218,7 +217,9 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
                           },
                   ),
                   const Divider(height: 1, indent: 16, endIndent: 16),
-                  ...dummyAgents.map((agent) {
+
+                  // PERUBAHAN: Melakukan iterasi dari variabel 'agents', bukan dummyAgents
+                  ...agents.map((agent) {
                     final isCurrent = agent.name == ticket.assigneeName;
                     final roleColor = agent.role == 'admin'
                         ? AppColors.wrnShapeRose
@@ -228,7 +229,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
                         radius: 18,
                         backgroundColor: roleColor.withOpacity(0.15),
                         child: Text(
-                          agent.name[0].toUpperCase(),
+                          agent.name.toUpperCase(),
                           style: TextStyle(
                             color: roleColor,
                             fontWeight: FontWeight.bold,
@@ -316,7 +317,29 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('#${widget.ticketId}'),
+        title: detailState.ticket != null
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    detailState.ticket!.title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    '#${widget.ticketId.substring(0, 8)}...',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.wrnLightPurple.withOpacity(0.7),
+                    ),
+                  ),
+                ],
+              )
+            : Text('#${widget.ticketId.substring(0, 3)}...'),
         centerTitle: false,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
@@ -355,7 +378,11 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
                     ),
                   )
                 : TextButton.icon(
-                    onPressed: () => _showAssignSheet(detailState.ticket!),
+                    // PERUBAHAN: Memasukkan availableAgents dari state
+                    onPressed: () => _showAssignSheet(
+                      detailState.ticket!,
+                      detailState.availableAgents,
+                    ),
                     icon: const Icon(Icons.person_add_outlined, size: 16),
                     label: const Text('Assign'),
                     style: TextButton.styleFrom(
@@ -760,7 +787,7 @@ class _CommentTab extends StatelessWidget {
                   radius: 18,
                   backgroundColor: AppColors.wrnBtsPurple.withOpacity(0.15),
                   child: Text(
-                    auth.name.isNotEmpty ? auth.name[0].toUpperCase() : '?',
+                    auth.name.isNotEmpty ? auth.name.toUpperCase() : '?',
                     style: const TextStyle(
                       color: AppColors.wrnBtsPurple,
                       fontWeight: FontWeight.bold,
@@ -886,7 +913,7 @@ class _CommentBubble extends StatelessWidget {
             backgroundColor: _roleColor(comment.authorRole).withOpacity(0.15),
             child: Text(
               comment.authorName.isNotEmpty
-                  ? comment.authorName[0].toUpperCase()
+                  ? comment.authorName.toUpperCase()
                   : '?',
               style: TextStyle(
                 color: _roleColor(comment.authorRole),

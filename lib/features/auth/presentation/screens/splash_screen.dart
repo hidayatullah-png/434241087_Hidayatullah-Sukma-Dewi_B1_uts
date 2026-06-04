@@ -6,7 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../providers/auth_provider.dart';
 import 'login_screen.dart';
-import '../../../dashboard/presentation/screens/dashboard_screen.dart';
+import '../../../dashboard/presentation/screens/main_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -78,16 +79,47 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     if (!mounted) return;
     _textController.forward();
 
-    // 3. Tunggu sebentar lalu navigate
+    // 3. Pengecekan Sesi Supabase (Dijalankan bersamaan dengan waktu tunggu animasi)
+    // Ambil sesi user saat ini dari memori lokal HP/Browser
+    final session = Supabase.instance.client.auth.currentSession;
+    
+    // Jika ada sesi (berarti sudah pernah login dan belum expired/logout)
+    if (session != null) {
+      try {
+        // Ambil data nama dan role dari tabel public.users
+        final userData = await Supabase.instance.client
+            .from('users')
+            .select('name, role')
+            .eq('id', session.user.id)
+            .maybeSingle();
+
+        if (userData != null && mounted) {
+           // Pulihkan status authProvider di Riverpod
+           ref.read(authProvider.notifier).setUser(
+             name: userData['name'] ?? 'User',
+             role: userData['role'] ?? 'user',
+             email: session.user.email ?? '',
+           );
+        }
+      } catch (e) {
+        // Jika gagal mengambil data (misal internet putus), abaikan saja.
+        // Nanti biarkan user masuk ke Dashboard dengan data default,
+        print('Gagal memulihkan profil user: $e');
+      }
+    }
+
+    // 4. Sisa waktu tunggu animasi agar transisinya tidak terpotong tiba-tiba
     await Future.delayed(const Duration(milliseconds: 1800));
     if (!mounted) return;
+    
     _navigate();
   }
 
   void _navigate() {
     final auth = ref.read(authProvider);
+    
     final destination = auth.isLoggedIn
-        ? const DashboardScreen()
+        ? const MainScreen() 
         : const LoginScreen();
 
     Navigator.pushReplacement(

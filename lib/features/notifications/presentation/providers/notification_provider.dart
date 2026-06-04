@@ -1,6 +1,5 @@
-// lib/features/notifications/presentation/providers/notification_provider.dart
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 // ── Model ──────────────────────────────────────────────────────
 
@@ -37,6 +36,7 @@ class AppNotification {
 }
 
 // ── State ──────────────────────────────────────────────────────
+// (SAMA PERSIS, TIDAK DIUBAH)
 
 class NotificationState {
   final List<AppNotification> notifications;
@@ -66,51 +66,117 @@ class NotificationState {
 
 // ── Notifier ───────────────────────────────────────────────────
 
-class NotificationNotifier extends StateNotifier<NotificationState> {
-  NotificationNotifier() : super(const NotificationState()) {
-    fetchNotifications();
+// 1. Ubah StateNotifier menjadi Notifier
+class NotificationNotifier extends Notifier<NotificationState> {
+  final _supabase = Supabase.instance.client;
+
+  // 2. build() sebagai pengganti constructor
+  @override
+  NotificationState build() {
+    // Jalankan fetch setelah inisialisasi state selesai
+    Future.microtask(() => fetchNotifications());
+    return const NotificationState();
+  }
+
+  // Helper untuk konversi tipe dari Database ke Enum
+  NotificationType _parseType(String typeStr) {
+    switch (typeStr) {
+      case 'statusUpdate': return NotificationType.statusUpdate;
+      case 'newComment': return NotificationType.newComment;
+      case 'assigned': return NotificationType.assigned;
+      case 'newTicket': return NotificationType.newTicket;
+      default: return NotificationType.statusUpdate;
+    }
   }
 
   Future<void> fetchNotifications() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      // TODO: ganti dengan actual API call
-      // final res = await http.get(Uri.parse('$baseUrl/api/notifications'));
-      // final list = (jsonDecode(res.body) as List)
-      //     .map((e) => AppNotification.fromJson(e))
-      //     .toList();
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) throw Exception('User not logged in');
 
-      await Future.delayed(const Duration(milliseconds: 600));
+      // Ambil notifikasi khusus untuk user yang sedang login
+      final response = await _supabase
+          .from('notifications')
+          .select()
+          .eq('user_id', userId)
+          .order('created_at', ascending: false);
+
+      final List<AppNotification> loadedNotifications = response.map((data) {
+        return AppNotification(
+          id: data['id'].toString(),
+          title: data['title'],
+          message: data['message'],
+          type: _parseType(data['type']),
+          ticketId: data['ticket_id'].toString(),
+          createdAt: data['created_at'].toString().substring(0, 10), // Format waktu sementara
+          isRead: data['is_read'],
+        );
+      }).toList();
 
       state = state.copyWith(
         isLoading: false,
-        notifications: _dummyNotifications,
+        notifications: loadedNotifications,
       );
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: 'Gagal memuat notifikasi.',
+        error: 'Gagal memuat notifikasi: $e',
       );
     }
   }
 
-  void markAsRead(String id) {
-    final updated = state.notifications.map((n) {
-      return n.id == id ? n.copyWith(isRead: true) : n;
-    }).toList();
-    state = state.copyWith(notifications: updated);
+  Future<void> markAsRead(String id) async {
+    try {
+      // Update di Supabase
+      await _supabase
+          .from('notifications')
+          .update({'is_read': true})
+          .eq('id', id);
+
+      // Update di local UI
+      final updated = state.notifications.map((n) {
+        return n.id == id ? n.copyWith(isRead: true) : n;
+      }).toList();
+      state = state.copyWith(notifications: updated);
+    } catch (e) {
+      print('Gagal update status baca: $e');
+    }
   }
 
-  void markAllAsRead() {
-    final updated = state.notifications
-        .map((n) => n.copyWith(isRead: true))
-        .toList();
-    state = state.copyWith(notifications: updated);
+  Future<void> markAllAsRead() async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
+
+      // Update semua milik user ini di Supabase
+      await _supabase
+          .from('notifications')
+          .update({'is_read': true})
+          .eq('user_id', userId)
+          .eq('is_read', false);
+
+      // Update di local UI
+      final updated = state.notifications
+          .map((n) => n.copyWith(isRead: true))
+          .toList();
+      state = state.copyWith(notifications: updated);
+    } catch (e) {
+      print('Gagal menandai semua sudah dibaca: $e');
+    }
   }
 
-  void deleteNotification(String id) {
-    final updated = state.notifications.where((n) => n.id != id).toList();
-    state = state.copyWith(notifications: updated);
+  Future<void> deleteNotification(String id) async {
+    try {
+      // Hapus dari Supabase
+      await _supabase.from('notifications').delete().eq('id', id);
+
+      // Hapus dari local UI
+      final updated = state.notifications.where((n) => n.id != id).toList();
+      state = state.copyWith(notifications: updated);
+    } catch (e) {
+      print('Gagal menghapus notifikasi: $e');
+    }
   }
 
   Future<void> refresh() => fetchNotifications();
@@ -118,75 +184,7 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
 
 // ── Provider ───────────────────────────────────────────────────
 
-final notificationProvider =
-    StateNotifierProvider<NotificationNotifier, NotificationState>(
-      (ref) => NotificationNotifier(),
-    );
-
-// ── Dummy data ─────────────────────────────────────────────────
-
-final _dummyNotifications = [
-  const AppNotification(
-    id: '1',
-    title: 'Status Tiket Diperbarui',
-    message: 'Tiket #1024 "Printer lantai 3" telah diubah ke In Progress.',
-    type: NotificationType.statusUpdate,
-    ticketId: '1024',
-    createdAt: '5 menit lalu',
-    isRead: false,
-  ),
-  const AppNotification(
-    id: '2',
-    title: 'Komentar Baru',
-    message: 'Rina Amelia menambahkan komentar pada tiket #1024.',
-    type: NotificationType.newComment,
-    ticketId: '1024',
-    createdAt: '20 menit lalu',
-    isRead: false,
-  ),
-  const AppNotification(
-    id: '3',
-    title: 'Tiket Di-assign',
-    message: 'Tiket #1023 "Akses VPN" telah di-assign ke kamu.',
-    type: NotificationType.assigned,
-    ticketId: '1023',
-    createdAt: '1 jam lalu',
-    isRead: false,
-  ),
-  const AppNotification(
-    id: '4',
-    title: 'Tiket Baru Masuk',
-    message: 'Ada tiket baru #1022 "Email tidak bisa kirim attachment".',
-    type: NotificationType.newTicket,
-    ticketId: '1022',
-    createdAt: '3 jam lalu',
-    isRead: true,
-  ),
-  const AppNotification(
-    id: '5',
-    title: 'Status Tiket Diperbarui',
-    message: 'Tiket #1021 "Laptop tidak bisa booting" telah Selesai.',
-    type: NotificationType.statusUpdate,
-    ticketId: '1021',
-    createdAt: '5 jam lalu',
-    isRead: true,
-  ),
-  const AppNotification(
-    id: '6',
-    title: 'Komentar Baru',
-    message: 'Dani Rahmat membalas komentar kamu pada tiket #1020.',
-    type: NotificationType.newComment,
-    ticketId: '1020',
-    createdAt: '1 hari lalu',
-    isRead: true,
-  ),
-  const AppNotification(
-    id: '7',
-    title: 'Tiket Baru Masuk',
-    message: 'Ada tiket baru #1019 "Internet lambat di ruang meeting".',
-    type: NotificationType.newTicket,
-    ticketId: '1019',
-    createdAt: '1 hari lalu',
-    isRead: true,
-  ),
-];
+// 3. Ubah StateNotifierProvider menjadi NotifierProvider
+final notificationProvider = NotifierProvider<NotificationNotifier, NotificationState>(() {
+  return NotificationNotifier();
+});

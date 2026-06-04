@@ -1,7 +1,6 @@
-// lib/features/tickets/presentation/providers/create_ticket_provider.dart
-
 import 'dart:io';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart' show StateNotifier, StateNotifierProvider;
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 // -- Enums --
 
@@ -99,6 +98,8 @@ class CreateTicketState {
 // -- Notifier --
 
 class CreateTicketNotifier extends StateNotifier<CreateTicketState> {
+  final _supabase = Supabase.instance.client;
+
   CreateTicketNotifier() : super(const CreateTicketState());
 
   void setTitle(String value) =>
@@ -134,24 +135,42 @@ class CreateTicketNotifier extends StateNotifier<CreateTicketState> {
     state = state.copyWith(isSubmitting: true, error: null);
 
     try {
-      // TODO: ganti dengan actual API call
-      // final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/api/tickets'));
-      // request.fields['title'] = state.title;
-      // request.fields['description'] = state.description;
-      // request.fields['category'] = state.category!.name;
-      // request.fields['priority'] = state.priority.name;
-      // for (final file in state.attachments) {
-      //   request.files.add(await http.MultipartFile.fromPath('attachments[]', file.path));
-      // }
-      // await request.send();
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) throw Exception('Sesi login tidak ditemukan.');
 
-      await Future.delayed(const Duration(milliseconds: 1000));
+      // 1. Simpan data teks ke tabel 'tickets'
+      final ticketResponse = await _supabase
+          .from('tickets')
+          .insert({
+            'title': state.title,
+            'description': state.description,
+            'category': state.category!.name,
+            'priority': state.priority.name,
+            'status': 'open',
+            'user_id': userId,
+          })
+          .select()
+          .single();
+
+      final ticketId = ticketResponse['id'];
+
+      // 2. Jika ada lampiran file, unggah ke Supabase Storage (Bucket: 'attachments')
+      if (state.attachments.isNotEmpty) {
+        for (final file in state.attachments) {
+          final fileExtension = file.path.split('.').last;
+          final fileName =
+              '${DateTime.now().millisecondsSinceEpoch}.$fileExtension';
+          final filePath = '$ticketId/$fileName';
+
+          await _supabase.storage.from('attachments').upload(filePath, file);
+        }
+      }
 
       state = state.copyWith(isSubmitting: false, isSuccess: true);
     } catch (e) {
       state = state.copyWith(
         isSubmitting: false,
-        error: 'Gagal membuat tiket. Coba lagi.',
+        error: 'Gagal membuat tiket: $e',
       );
     }
   }

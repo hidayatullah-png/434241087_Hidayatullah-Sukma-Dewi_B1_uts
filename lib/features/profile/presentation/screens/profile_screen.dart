@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState;
 import '../../../../../../core/theme/app_colors.dart';
 import '../../../../../../core/theme/theme_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -16,6 +17,7 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   File? _localAvatar;
   final _picker = ImagePicker();
+  final _supabase = Supabase.instance.client; // Instance Supabase
 
   // -- Pick avatar --
 
@@ -104,68 +106,110 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final nameController = TextEditingController(text: auth.name);
     final emailController = TextEditingController(text: auth.email);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    bool isSaving = false;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? AppColors.wrnDarkInput : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Edit Profil',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _DialogTextField(
-              controller: nameController,
-              label: 'Nama',
-              icon: Icons.person_outline,
-              isDark: isDark,
-            ),
-            const SizedBox(height: 12),
-            _DialogTextField(
-              controller: emailController,
-              label: 'Email',
-              icon: Icons.email_outlined,
-              isDark: isDark,
-              keyboardType: TextInputType.emailAddress,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: isDark ? AppColors.wrnDarkInput : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text(
+            'Edit Profil',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _DialogTextField(
+                controller: nameController,
+                label: 'Nama',
+                icon: Icons.person_outline,
+                isDark: isDark,
+              ),
+              const SizedBox(height: 12),
+              _DialogTextField(
+                controller: emailController,
+                label: 'Email',
+                icon: Icons.email_outlined,
+                isDark: isDark,
+                keyboardType: TextInputType.emailAddress,
+              ),
+            ],
+          ),
+          actions: [
+            if (!isSaving)
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(
+                  'Batal',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                  ),
+                ),
+              ),
+            ElevatedButton(
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                      setDialogState(() => isSaving = true);
+                      try {
+                        final userId = _supabase.auth.currentUser?.id;
+                        final newEmail = emailController.text.trim();
+                        final newName = nameController.text.trim();
+
+                        if (userId != null) {
+                          // Update email di sistem Auth Supabase (jika berubah)
+                          if (newEmail != auth.email) {
+                            await _supabase.auth.updateUser(
+                              UserAttributes(email: newEmail),
+                            );
+                          }
+                          // Update nama & email di tabel users
+                          await _supabase.from('users').update({
+                            'name': newName,
+                            'email': newEmail,
+                          }).eq('id', userId);
+
+                          // Update Riverpod
+                          ref.read(authProvider.notifier).setUser(
+                                name: newName,
+                                role: auth.role,
+                                email: newEmail,
+                              );
+
+                          if (mounted) {
+                            Navigator.pop(ctx);
+                            _showSnack('Profil berhasil diperbarui');
+                          }
+                        }
+                      } catch (e) {
+                        _showSnack('Gagal memperbarui profil: $e');
+                      } finally {
+                        if (mounted) setDialogState(() => isSaving = false);
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.wrnBtsPurple,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: isSaving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Text('Simpan'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              'Batal',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-              ),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              // TODO: panggil API update profil
-              ref
-                  .read(authProvider.notifier)
-                  .setUser(
-                    name: nameController.text.trim(),
-                    role: auth.role,
-                    email: emailController.text.trim(),
-                  );
-              Navigator.pop(ctx);
-              _showSnack('Profil berhasil diperbarui');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.wrnBtsPurple,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: const Text('Simpan'),
-          ),
-        ],
       ),
     );
   }
@@ -173,14 +217,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   // -- Ganti password dialog --
 
   void _showChangePasswordDialog() {
-    final oldPassController = TextEditingController();
+    final oldPassController = TextEditingController(); // Info: Supabase tidak wajib mengirim old pass untuk update sesi aktif
     final newPassController = TextEditingController();
     final confirmPassController = TextEditingController();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     String? errorText;
+    bool isSaving = false;
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           backgroundColor: isDark ? AppColors.wrnDarkInput : Colors.white,
@@ -242,35 +288,55 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ],
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(
-                'Batal',
-                style: TextStyle(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withOpacity(0.5),
+            if (!isSaving)
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(
+                  'Batal',
+                  style: TextStyle(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.5),
+                  ),
                 ),
               ),
-            ),
             ElevatedButton(
-              onPressed: () {
-                if (newPassController.text != confirmPassController.text) {
-                  setDialogState(
-                    () => errorText = 'Konfirmasi password tidak cocok',
-                  );
-                  return;
-                }
-                if (newPassController.text.length < 6) {
-                  setDialogState(
-                    () => errorText = 'Password minimal 6 karakter',
-                  );
-                  return;
-                }
-                // TODO: panggil API ganti password
-                Navigator.pop(ctx);
-                _showSnack('Password berhasil diperbarui');
-              },
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                      if (newPassController.text != confirmPassController.text) {
+                        setDialogState(
+                          () => errorText = 'Konfirmasi password tidak cocok',
+                        );
+                        return;
+                      }
+                      if (newPassController.text.length < 6) {
+                        setDialogState(
+                          () => errorText = 'Password minimal 6 karakter',
+                        );
+                        return;
+                      }
+
+                      setDialogState(() {
+                        isSaving = true;
+                        errorText = null;
+                      });
+
+                      try {
+                        // Mengupdate password via Supabase
+                        await _supabase.auth.updateUser(
+                          UserAttributes(password: newPassController.text),
+                        );
+                        if (mounted) {
+                          Navigator.pop(ctx);
+                          _showSnack('Password berhasil diperbarui');
+                        }
+                      } catch (e) {
+                        setDialogState(() => errorText = 'Gagal: $e');
+                      } finally {
+                        if (mounted) setDialogState(() => isSaving = false);
+                      }
+                    },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.wrnBtsPurple,
                 foregroundColor: Colors.white,
@@ -278,7 +344,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              child: const Text('Simpan'),
+              child: isSaving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Text('Simpan'),
             ),
           ],
         ),
@@ -290,49 +365,78 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   void _showLogoutConfirm() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    bool isLoggingOut = false;
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? AppColors.wrnDarkInput : Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          'Keluar?',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          'Kamu akan keluar dari aplikasi. Yakin ingin logout?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              'Batal',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-              ),
-            ),
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: isDark ? AppColors.wrnDarkInput : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text(
+            'Keluar?',
+            style: TextStyle(fontWeight: FontWeight.bold),
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              ref.read(authProvider.notifier).logout();
-              // Navigate ke login, hapus semua route
-              Navigator.pushNamedAndRemoveUntil(
-                context,
-                '/login',
-                (route) => false,
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFCF6679),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: const Text('Logout'),
+          content: const Text(
+            'Kamu akan keluar dari aplikasi. Yakin ingin logout?',
           ),
-        ],
+          actions: [
+            if (!isLoggingOut)
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(
+                  'Batal',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                  ),
+                ),
+              ),
+            ElevatedButton(
+              onPressed: isLoggingOut
+                  ? null
+                  : () async {
+                      setDialogState(() => isLoggingOut = true);
+                      try {
+                        // 1. Sign out dari server Supabase
+                        await _supabase.auth.signOut();
+                        
+                        if (mounted) {
+                          Navigator.pop(ctx); // Tutup dialog
+                          // 2. Bersihkan state Riverpod
+                          ref.read(authProvider.notifier).logout();
+                          // 3. Navigate ke login
+                          Navigator.pushNamedAndRemoveUntil(
+                            context,
+                            '/login',
+                            (route) => false,
+                          );
+                        }
+                      } catch (e) {
+                        _showSnack('Gagal logout: $e');
+                        setDialogState(() => isLoggingOut = false);
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFCF6679),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: isLoggingOut
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Text('Logout'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -387,7 +491,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         child: _localAvatar == null
                             ? Text(
                                 auth.name.isNotEmpty
-                                    ? auth.name[0].toUpperCase()
+                                    ? auth.name.toUpperCase()
                                     : '?',
                                 style: const TextStyle(
                                   color: AppColors.wrnBtsPurple,
@@ -624,6 +728,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 }
 
 // -- Helper Widgets --
+// (Di bawah ini tidak ada yang diubah sama sekali, tetap murni 100% kode bawaanmu)
 
 class _SectionLabel extends StatelessWidget {
   final String text;

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../auth/domain/entities/ticket.dart';
 
 // -- Model --
@@ -32,46 +33,62 @@ abstract class DashboardRepository {
 class DashboardRepositoryImpl implements DashboardRepository {
   @override
   Future<DashboardData> getDashboardData() async {
-    // TODO: ganti dengan actual HTTP call ke API kamu
-    // final res = await http.get(Uri.parse('$baseUrl/api/dashboard'));
-    // return DashboardData.fromJson(jsonDecode(res.body));
+    final supabase = Supabase.instance.client;
 
-    await Future.delayed(const Duration(milliseconds: 700));
+    try {
+      final response = await supabase
+          .from('tickets')
+          .select(
+            'id, title, description, status, created_at, assignee:users!tickets_assignee_id_fkey(name)',
+          )
+          .order('created_at', ascending: false);
 
-    return DashboardData(
-      totalTickets: 24,
-      openTickets: 8,
-      inProgressTickets: 5,
-      resolvedTickets: 11,
-      unassignedTickets: 3,
-      unreadNotifications: 2,
-      recentTickets: const [
-        Ticket(
-          id: '1024',
-          title: 'Printer lantai 3 tidak bisa digunakan',
-          description: 'Printer menampilkan error code 0x03 saat mencetak',
-          status: 'open',
-          createdAt: '2 jam lalu',
-          assigneeName: null,
-        ),
-        Ticket(
-          id: '1023',
-          title: 'Akses VPN tidak bisa login',
-          description: 'Muncul pesan Authentication Failed saat connect',
-          status: 'in_progress',
-          createdAt: '5 jam lalu',
-          assigneeName: 'Leon K.',
-        ),
-        Ticket(
-          id: '1022',
-          title: 'Email tidak bisa kirim attachment',
-          description: 'Error saat upload file lebih dari 5MB',
-          status: 'resolved',
-          createdAt: '1 hari lalu',
-          assigneeName: 'Annisa P.',
-        ),
-      ],
-    );
+      // ← Ini yang hilang di kode kamu
+      final List<dynamic> rawTickets = response;
+
+      int open = 0;
+      int inProgress = 0;
+      int resolved = 0;
+      int unassigned = 0;
+      final List<Ticket> recentList = [];
+
+      for (var row in rawTickets) {
+        final status = row['status'] as String;
+
+        if (status == 'open') open++;
+        if (status == 'in_progress') inProgress++;
+        if (status == 'resolved') resolved++;
+
+        final assigneeName = row['assignee']?['name'];
+        if (assigneeName == null) unassigned++;
+
+        if (recentList.length < 3) {
+          recentList.add(
+            Ticket(
+              id: row['id'].toString(),
+              title: row['title'] ?? 'Tanpa Judul',
+              description: row['description'] ?? '',
+              status: status,
+              createdAt: row['created_at'].toString().substring(0, 10),
+              assigneeName: assigneeName,
+            ),
+          );
+        }
+      }
+
+      return DashboardData(
+        totalTickets: rawTickets.length,
+        openTickets: open,
+        inProgressTickets: inProgress,
+        resolvedTickets: resolved,
+        unassignedTickets: unassigned,
+        unreadNotifications: 2,
+        recentTickets: recentList,
+      );
+    } catch (e) {
+      print('Dashboard error: $e');
+      rethrow;
+    }
   }
 }
 
@@ -83,5 +100,12 @@ final dashboardRepositoryProvider = Provider<DashboardRepository>(
 
 final dashboardProvider = FutureProvider<DashboardData>((ref) async {
   final repo = ref.watch(dashboardRepositoryProvider);
-  return repo.getDashboardData();
+  try {
+    return await repo.getDashboardData();
+  } catch (e, stack) {
+    print('=== DASHBOARD ERROR ===');
+    print(e.toString());
+    print(stack.toString());
+    rethrow;
+  }
 });

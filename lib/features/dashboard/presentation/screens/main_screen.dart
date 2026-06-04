@@ -33,7 +33,8 @@ class MainScreen extends ConsumerWidget {
         ),
         child: BottomNavigationBar(
           currentIndex: selectedIndex,
-          onTap: (index) => ref.read(navIndexProvider.notifier).state = index,
+          // PERUBAHAN HANYA DI BARIS INI:
+          onTap: (index) => ref.read(navIndexProvider.notifier).setIndex(index),
           backgroundColor: AppColors.wrnDarkBg,
           selectedItemColor: AppColors.wrnBtsPurple,
           unselectedItemColor: Colors.white54,

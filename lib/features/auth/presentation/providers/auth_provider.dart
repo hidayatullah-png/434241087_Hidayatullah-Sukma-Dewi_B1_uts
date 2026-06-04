@@ -21,8 +21,11 @@ class AuthState {
   );
 }
 
-class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier() : super(AuthState.initial());
+class AuthNotifier extends Notifier<AuthState> {
+  @override
+  AuthState build() {
+    return AuthState.initial();
+  }
 
   void setUser({
     required String name,
@@ -35,6 +38,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
   void logout() => state = AuthState.initial();
 }
 
-final authProvider = StateNotifierProvider<AuthNotifier, AuthState>(
-  (ref) => AuthNotifier(),
-);
+final authProvider = NotifierProvider<AuthNotifier, AuthState>(() {
+  return AuthNotifier();
+});
