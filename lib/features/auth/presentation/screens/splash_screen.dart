@@ -357,7 +357,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
             child: FadeTransition(
               opacity: _textFade,
               child: const Text(
-                'v1.0.0',
+                'v2.0.0',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppColors.textGrey, fontSize: 11),
               ),

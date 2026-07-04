@@ -32,97 +32,54 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
     super.dispose();
   }
 
-  // ── Update Status (admin/helpdesk) ────────────────────────────
-
-  void _showUpdateStatusSheet(TicketDetail ticket) {
+  // FIX 1: _showFinishConfirm ditambahkan (sebelumnya tidak ada)
+  void _showFinishConfirm() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final statuses = ['open', 'in_progress', 'resolved', 'closed'];
-
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      backgroundColor: isDark ? AppColors.wrnDarkInput : Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.4),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 4,
-                ),
-                child: Text(
-                  'Update Status Tiket',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              ...statuses.map((s) {
-                final style = _statusStyle(s);
-                final isCurrent = s == ticket.status;
-                return ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: style.color.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(style.icon, color: style.color, size: 20),
-                  ),
-                  title: Text(
-                    style.label,
-                    style: TextStyle(
-                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
-                      color: isCurrent
-                          ? style.color
-                          : Theme.of(context).colorScheme.onSurface,
-                    ),
-                  ),
-                  trailing: isCurrent
-                      ? Icon(
-                          Icons.check_circle_rounded,
-                          color: style.color,
-                          size: 18,
-                        )
-                      : null,
-                  onTap: isCurrent
-                      ? null
-                      : () {
-                          Navigator.pop(context);
-                          ref
-                              .read(
-                                ticketDetailProvider(widget.ticketId).notifier,
-                              )
-                              .updateStatus(s);
-                        },
-                );
-              }),
-              const SizedBox(height: 8),
-            ],
-          ),
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppColors.wrnDarkInput : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Selesaikan Tiket?',
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
+        content: const Text(
+          'Pastikan masalah sudah terselesaikan sepenuhnya. '
+          'Status tiket akan berubah menjadi Closed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Batal',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+              ),
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref
+                  .read(ticketDetailProvider(widget.ticketId).notifier)
+                  .finishTicket();
+            },
+            icon: const Icon(Icons.check_rounded, size: 16),
+            label: const Text('Selesai'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF4CAF50),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  // PERUBAHAN: Menambahkan parameter "agents" yang dikirim dari Provider
   void _showAssignSheet(TicketDetail ticket, List<HelpdeskAgent> agents) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = Theme.of(context).colorScheme;
@@ -130,8 +87,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
     showModalBottomSheet(
       context: context,
       backgroundColor: isDark ? AppColors.wrnDarkInput : Colors.white,
-      isScrollControlled:
-          true, // penting agar bisa pakai DraggableScrollableSheet
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -142,7 +98,6 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
         expand: false,
         builder: (_, scrollController) => Column(
           children: [
-            // Handle + judul (fixed, tidak ikut scroll)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
               child: Column(
@@ -169,13 +124,11 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
               ),
             ),
             const Divider(height: 1),
-            // Scrollable list
             Expanded(
               child: ListView(
                 controller: scrollController,
                 padding: const EdgeInsets.only(bottom: 16),
                 children: [
-                  // Opsi unassign
                   ListTile(
                     leading: Container(
                       padding: const EdgeInsets.all(8),
@@ -217,8 +170,6 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
                           },
                   ),
                   const Divider(height: 1, indent: 16, endIndent: 16),
-
-                  // PERUBAHAN: Melakukan iterasi dari variabel 'agents', bukan dummyAgents
                   ...agents.map((agent) {
                     final isCurrent = agent.name == ticket.assigneeName;
                     final roleColor = agent.role == 'admin'
@@ -229,7 +180,7 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
                         radius: 18,
                         backgroundColor: roleColor.withOpacity(0.15),
                         child: Text(
-                          agent.name.toUpperCase(),
+                          agent.name[0].toUpperCase(),
                           style: TextStyle(
                             color: roleColor,
                             fontWeight: FontWeight.bold,
@@ -284,8 +235,6 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
     );
   }
 
-  // ── Submit comment ────────────────────────────────────────────
-
   Future<void> _handleSendComment() async {
     final auth = ref.read(authProvider);
     await ref
@@ -293,7 +242,6 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
         .submitComment(auth.name, auth.role);
     _commentController.clear();
 
-    // scroll ke bawah setelah komentar terkirim
     await Future.delayed(const Duration(milliseconds: 100));
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
@@ -304,8 +252,6 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
     }
   }
 
-  // ── Build ─────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     final detailState = ref.watch(ticketDetailProvider(widget.ticketId));
@@ -313,61 +259,26 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
-    final isAdminOrHelpdesk = auth.role == 'admin' || auth.role == 'helpdesk';
-
     return Scaffold(
       appBar: AppBar(
         title: detailState.ticket != null
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    detailState.ticket!.title,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    '#${widget.ticketId.substring(0, 8)}...',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.wrnLightPurple.withOpacity(0.7),
-                    ),
-                  ),
-                ],
+            ? Text(
+                detailState.ticket!.title,
+                style: const TextStyle(fontSize: 15),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               )
-            : Text('#${widget.ticketId.substring(0, 3)}...'),
+            : Text('#\${widget.ticketId}'),
         centerTitle: false,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: () => Navigator.pop(context),
         ),
-        // Update status button — admin/helpdesk only
         actions: [
-          if (isAdminOrHelpdesk && detailState.ticket != null)
-            detailState.isUpdatingStatus
-                ? const Padding(
-                    padding: EdgeInsets.all(14),
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                : TextButton.icon(
-                    onPressed: () =>
-                        _showUpdateStatusSheet(detailState.ticket!),
-                    icon: const Icon(Icons.edit_outlined, size: 16),
-                    label: const Text('Status'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.wrnLightPurple,
-                    ),
-                  ),
-          // Assign button
-          if (isAdminOrHelpdesk && detailState.ticket != null)
+          // Assign — admin only, tiket belum closed
+          if (auth.role == 'admin' &&
+              detailState.ticket != null &&
+              detailState.ticket!.status != 'closed')
             detailState.isAssigning
                 ? const Padding(
                     padding: EdgeInsets.all(14),
@@ -378,7 +289,6 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
                     ),
                   )
                 : TextButton.icon(
-                    // PERUBAHAN: Memasukkan availableAgents dari state
                     onPressed: () => _showAssignSheet(
                       detailState.ticket!,
                       detailState.availableAgents,
@@ -389,6 +299,40 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
                       foregroundColor: AppColors.wrnLightPurple,
                     ),
                   ),
+
+          // Finish — helpdesk only, hanya saat in_progress
+          if (auth.role == 'helpdesk' &&
+              detailState.ticket != null &&
+              detailState.ticket!.status == 'in_progress')
+            detailState.isUpdatingStatus
+                ? const Padding(
+                    padding: EdgeInsets.all(14),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : OutlinedButton.icon(
+                    onPressed: () => _showFinishConfirm(),
+                    icon: const Icon(Icons.check_circle_outline, size: 16),
+                    label: const Text('Finish'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF4CAF50),
+                      side: const BorderSide(
+                        color: Color(0xFF4CAF50),
+                        width: 1.5,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                    ),
+                  ),
+
           const SizedBox(width: 4),
         ],
         bottom: TabBar(
@@ -418,15 +362,12 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
           : TabBarView(
               controller: _tabController,
               children: [
-                // ── Tab 1: Detail ──
                 _DetailTab(
                   ticket: detailState.ticket!,
                   isDark: isDark,
                   cs: cs,
                   theme: theme,
                 ),
-
-                // ── Tab 2: Komentar ──
                 _CommentTab(
                   ticket: detailState.ticket!,
                   auth: auth,
@@ -444,41 +385,6 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
               ],
             ),
     );
-  }
-
-  _StatusStyle _statusStyle(String status) {
-    switch (status.toLowerCase()) {
-      case 'open':
-        return _StatusStyle(
-          label: 'Open',
-          color: AppColors.wrnShapeRose,
-          icon: Icons.inbox_outlined,
-        );
-      case 'in_progress':
-        return _StatusStyle(
-          label: 'In Progress',
-          color: AppColors.wrnBtsPurple,
-          icon: Icons.autorenew_rounded,
-        );
-      case 'resolved':
-        return _StatusStyle(
-          label: 'Selesai',
-          color: const Color(0xFF4CAF50),
-          icon: Icons.check_circle_outline,
-        );
-      case 'closed':
-        return _StatusStyle(
-          label: 'Closed',
-          color: const Color(0xFF9E9E9E),
-          icon: Icons.cancel_outlined,
-        );
-      default:
-        return _StatusStyle(
-          label: status,
-          color: AppColors.wrnLightPurple,
-          icon: Icons.circle_outlined,
-        );
-    }
   }
 }
 
@@ -507,7 +413,39 @@ class _DetailTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Status + Priority badges ──
+          // Banner closed
+          if (ticket.status == 'closed')
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF4CAF50).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: const Color(0xFF4CAF50).withOpacity(0.3),
+                ),
+              ),
+              child: const Row(
+                children: [
+                  Icon(
+                    Icons.check_circle_rounded,
+                    color: Color(0xFF4CAF50),
+                    size: 16,
+                  ),
+                  SizedBox(width: 8),
+                  Text(
+                    'Tiket ini telah diselesaikan',
+                    style: TextStyle(
+                      color: Color(0xFF4CAF50),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           Row(
             children: [
               _Badge(
@@ -526,7 +464,6 @@ class _DetailTab extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          // ── Judul ──
           Text(
             ticket.title,
             style: theme.textTheme.titleLarge?.copyWith(
@@ -537,7 +474,6 @@ class _DetailTab extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          // ── Info grid ──
           _InfoCard(
             isDark: isDark,
             cs: cs,
@@ -568,7 +504,6 @@ class _DetailTab extends StatelessWidget {
 
           const SizedBox(height: 20),
 
-          // ── Deskripsi ──
           Text(
             'Deskripsi',
             style: theme.textTheme.titleSmall?.copyWith(
@@ -598,7 +533,6 @@ class _DetailTab extends StatelessWidget {
             ),
           ),
 
-          // ── Attachments ──
           if (ticket.attachmentUrls.isNotEmpty) ...[
             const SizedBox(height: 20),
             Text(
@@ -724,7 +658,6 @@ class _CommentTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // ── Daftar komentar ──
         Expanded(
           child: ticket.comments.isEmpty
               ? Center(
@@ -764,8 +697,6 @@ class _CommentTab extends StatelessWidget {
                   },
                 ),
         ),
-
-        // ── Input komentar ──
         Container(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
           decoration: BoxDecoration(
@@ -782,12 +713,11 @@ class _CommentTab extends StatelessWidget {
             top: false,
             child: Row(
               children: [
-                // Avatar
                 CircleAvatar(
                   radius: 18,
                   backgroundColor: AppColors.wrnBtsPurple.withOpacity(0.15),
                   child: Text(
-                    auth.name.isNotEmpty ? auth.name.toUpperCase() : '?',
+                    auth.name.isNotEmpty ? auth.name[0].toUpperCase() : '?',
                     style: const TextStyle(
                       color: AppColors.wrnBtsPurple,
                       fontWeight: FontWeight.bold,
@@ -796,8 +726,6 @@ class _CommentTab extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-
-                // TextField
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
@@ -833,8 +761,6 @@ class _CommentTab extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-
-                // Send button
                 GestureDetector(
                   onTap: detailState.isSubmittingComment ? null : onSend,
                   child: AnimatedContainer(
@@ -906,14 +832,13 @@ class _CommentBubble extends StatelessWidget {
       mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        // Avatar (hanya untuk orang lain)
         if (!isMe) ...[
           CircleAvatar(
             radius: 16,
             backgroundColor: _roleColor(comment.authorRole).withOpacity(0.15),
             child: Text(
               comment.authorName.isNotEmpty
-                  ? comment.authorName.toUpperCase()
+                  ? comment.authorName[0].toUpperCase()
                   : '?',
               style: TextStyle(
                 color: _roleColor(comment.authorRole),
@@ -924,15 +849,12 @@ class _CommentBubble extends StatelessWidget {
           ),
           const SizedBox(width: 8),
         ],
-
-        // Bubble
         Flexible(
           child: Column(
             crossAxisAlignment: isMe
                 ? CrossAxisAlignment.end
                 : CrossAxisAlignment.start,
             children: [
-              // Nama + role badge
               if (!isMe)
                 Padding(
                   padding: const EdgeInsets.only(left: 4, bottom: 4),
@@ -970,8 +892,6 @@ class _CommentBubble extends StatelessWidget {
                     ],
                   ),
                 ),
-
-              // Bubble message
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
@@ -1001,8 +921,6 @@ class _CommentBubble extends StatelessWidget {
                   ),
                 ),
               ),
-
-              // Timestamp
               Padding(
                 padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
                 child: Text(
@@ -1013,8 +931,6 @@ class _CommentBubble extends StatelessWidget {
             ],
           ),
         ),
-
-        // Avatar untuk diri sendiri
         if (isMe) ...[
           const SizedBox(width: 8),
           CircleAvatar(
@@ -1152,8 +1068,6 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-// ── Error State ────────────────────────────────────────────────
-
 class _ErrorState extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
@@ -1179,8 +1093,6 @@ class _ErrorState extends StatelessWidget {
     );
   }
 }
-
-// ── Internal model helpers ─────────────────────────────────────
 
 class _StatusStyle {
   final String label;

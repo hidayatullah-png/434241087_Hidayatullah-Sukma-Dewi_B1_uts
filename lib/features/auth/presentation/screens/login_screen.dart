@@ -9,7 +9,6 @@ import '../../../../core/providers/navigation_provider.dart';
 import 'register_screen.dart';
 import 'reset_password_screen.dart';
 
-// -- Dummy Users Dihapus --
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});

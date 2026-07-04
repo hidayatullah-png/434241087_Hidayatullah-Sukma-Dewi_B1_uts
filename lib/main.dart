@@ -6,14 +6,24 @@ import 'core/theme/theme_provider.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
 import 'features/dashboard/presentation/screens/main_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Supabase.initialize(
-    url: 'https://bqlqevjroggslxffnsgw.supabase.co',
-    anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJxbHFldmpyb2dnc2x4ZmZuc2d3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1NzkwNzgsImV4cCI6MjA5MjE1NTA3OH0.etxbJB5feYm7BlZBVgnBYqzO7dN_yxR6DMdHEynt3QY',
-  );
+  await dotenv.load(fileName: '.env');
+
+  final supabaseUrl = dotenv.env['SUPABASE_URL'];
+  final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
+
+  if (supabaseUrl == null || supabaseAnonKey == null) {
+    throw Exception(
+      'SUPABASE_URL atau SUPABASE_ANON_KEY tidak ditemukan di .env. '
+      'Pastikan file .env ada di root project dan key-nya benar.',
+    );
+  }
+
+  await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
+
   runApp(const ProviderScope(child: MyApp()));
 }
 

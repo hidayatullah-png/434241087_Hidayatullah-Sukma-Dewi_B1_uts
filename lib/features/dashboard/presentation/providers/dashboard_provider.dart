@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../auth/domain/entities/ticket.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 
 // -- Model --
 
@@ -27,23 +28,35 @@ class DashboardData {
 // -- Repository --
 
 abstract class DashboardRepository {
-  Future<DashboardData> getDashboardData();
+  // 'user' hanya lihat tiket miliknya sendiri,
+  // 'admin'/'helpdesk' lihat semua tiket.
+  Future<DashboardData> getDashboardData({required String role});
 }
 
 class DashboardRepositoryImpl implements DashboardRepository {
   @override
-  Future<DashboardData> getDashboardData() async {
+  Future<DashboardData> getDashboardData({required String role}) async {
     final supabase = Supabase.instance.client;
 
     try {
-      final response = await supabase
+      var query = supabase
           .from('tickets')
           .select(
-            'id, title, description, status, created_at, assignee:users!tickets_assignee_id_fkey(name)',
-          )
-          .order('created_at', ascending: false);
+            'id, title, description, status, created_at, user_id, assignee:users!tickets_assignee_id_fkey(name)',
+          );
 
-      // ← Ini yang hilang di kode kamu
+      // User biasa hanya boleh lihat tiket miliknya sendiri.
+      // Admin & helpdesk tetap lihat semua tiket (tanpa filter tambahan).
+      if (role == 'user') {
+        final userId = supabase.auth.currentUser?.id;
+        if (userId == null) {
+          throw Exception('User belum login');
+        }
+        query = query.eq('user_id', userId);
+      }
+
+      final response = await query.order('created_at', ascending: false);
+
       final List<dynamic> rawTickets = response;
 
       int open = 0;
@@ -81,7 +94,7 @@ class DashboardRepositoryImpl implements DashboardRepository {
         openTickets: open,
         inProgressTickets: inProgress,
         resolvedTickets: resolved,
-        unassignedTickets: unassigned,
+        unassignedTickets: role == 'user' ? 0 : unassigned,
         unreadNotifications: 2,
         recentTickets: recentList,
       );
@@ -100,8 +113,9 @@ final dashboardRepositoryProvider = Provider<DashboardRepository>(
 
 final dashboardProvider = FutureProvider<DashboardData>((ref) async {
   final repo = ref.watch(dashboardRepositoryProvider);
+  final auth = ref.watch(authProvider);
   try {
-    return await repo.getDashboardData();
+    return await repo.getDashboardData(role: auth.role);
   } catch (e, stack) {
     print('=== DASHBOARD ERROR ===');
     print(e.toString());

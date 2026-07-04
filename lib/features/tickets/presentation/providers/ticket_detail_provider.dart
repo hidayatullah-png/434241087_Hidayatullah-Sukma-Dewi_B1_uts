@@ -1,7 +1,8 @@
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../../core/utils/date_formatter.dart';
 
-// -- Helpdesk Agents (Sekarang dinamis dari Database) --
+// -- Helpdesk Agents --
 
 class HelpdeskAgent {
   final String id;
@@ -20,7 +21,7 @@ class HelpdeskAgent {
 class TicketComment {
   final String id;
   final String authorName;
-  final String authorRole; // 'user' | 'helpdesk' | 'admin'
+  final String authorRole;
   final String message;
   final String createdAt;
 
@@ -62,7 +63,6 @@ class TicketDetail {
 }
 
 // -- State --
-// (SAMA PERSIS)
 
 class TicketDetailState {
   final TicketDetail? ticket;
@@ -72,8 +72,6 @@ class TicketDetailState {
   final bool isAssigning;
   final String? error;
   final String commentText;
-
-  // Menyimpan daftar agent untuk form Assign
   final List<HelpdeskAgent> availableAgents;
 
   const TicketDetailState({
@@ -118,7 +116,7 @@ class TicketDetailNotifier extends StateNotifier<TicketDetailState> {
 
   TicketDetailNotifier(this.ticketId) : super(const TicketDetailState()) {
     fetchDetail();
-    _fetchAgents(); // Ambil list agent (admin & helpdesk) untuk menu assign
+    _fetchAgents();
   }
 
   Future<void> _fetchAgents() async {
@@ -128,7 +126,7 @@ class TicketDetailNotifier extends StateNotifier<TicketDetailState> {
           .select('id, name, role')
           .inFilter('role', ['admin', 'helpdesk']);
 
-      final agents = response.map((data) {
+      final agents = (response as List).map((data) {
         return HelpdeskAgent(
           id: data['id'].toString(),
           name: data['name'],
@@ -145,7 +143,6 @@ class TicketDetailNotifier extends StateNotifier<TicketDetailState> {
   Future<void> fetchDetail() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      // 1. Ambil detail tiket (Join tabel users 2 kali: untuk Reporter dan Assignee)
       final response = await _supabase
           .from('tickets')
           .select('''
@@ -156,27 +153,24 @@ class TicketDetailNotifier extends StateNotifier<TicketDetailState> {
           .eq('id', ticketId)
           .single();
 
-      // 2. Ambil komentar tiket (Join ke tabel users untuk tau siapa yang komentar)
       final commentsResponse = await _supabase
           .from('ticket_comments')
           .select('id, message, created_at, users(name, role)')
           .eq('ticket_id', ticketId)
-          .order('created_at', ascending: true); // Urut dari terlama ke terbaru
+          .order('created_at', ascending: true);
 
-      final List<TicketComment> loadedComments = commentsResponse.map((c) {
-        return TicketComment(
-          id: c['id'].toString(),
-          authorName: c['users']['name'] ?? 'User tidak diketahui',
-          authorRole: c['users']['role'] ?? 'user',
-          message: c['message'],
-          createdAt: c['created_at'].toString().substring(
-            0,
-            16,
-          ), // Sederhanakan format jam
-        );
-      }).toList();
+      final List<TicketComment> loadedComments = (commentsResponse as List).map(
+        (c) {
+          return TicketComment(
+            id: c['id'].toString(),
+            authorName: c['users']['name'] ?? 'User tidak diketahui',
+            authorRole: c['users']['role'] ?? 'user',
+            message: c['message'],
+            createdAt: DateFormatter.formatDateTime(c['created_at'].toString()),
+          );
+        },
+      ).toList();
 
-      // 3. Masukkan ke dalam State (Ingat: tidak ada perubahan nama properti di Model!)
       state = state.copyWith(
         isLoading: false,
         ticket: TicketDetail(
@@ -186,11 +180,12 @@ class TicketDetailNotifier extends StateNotifier<TicketDetailState> {
           status: response['status'] ?? 'open',
           priority: response['priority'] ?? 'medium',
           category: response['category'] ?? 'other',
-          createdAt: response['created_at'].toString().substring(0, 16),
-          reporterName: response['reporter']?['name'] ?? 'Unknown Reporter',
+          createdAt: DateFormatter.formatDateTime(
+            response['created_at'].toString(),
+          ),
+          reporterName: response['reporter']?['name'] ?? 'Unknown',
           assigneeName: response['assignee']?['name'],
-          attachmentUrls:
-              [], // TODO: Nanti bisa ditambah kalau pakai Storage bucket
+          attachmentUrls: const [],
           comments: loadedComments,
         ),
       );
@@ -216,40 +211,27 @@ class TicketDetailNotifier extends StateNotifier<TicketDetailState> {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) throw Exception('User not logged in');
 
-      // Insert ke Supabase
       final response = await _supabase
           .from('ticket_comments')
           .insert({'ticket_id': ticketId, 'user_id': userId, 'message': text})
           .select('id, created_at')
           .single();
 
-      // Tambahkan ke UI Local
       final newComment = TicketComment(
         id: response['id'].toString(),
         authorName: authorName,
         authorRole: authorRole,
         message: text,
-        createdAt: response['created_at'].toString().substring(0, 16),
+        createdAt: DateFormatter.formatDateTime(
+          response['created_at'].toString(),
+        ),
       );
 
-      final updatedComments = [...state.ticket!.comments, newComment];
-
-      // Re-build TicketDetail tanpa merusak atribut lain
       state = state.copyWith(
         isSubmittingComment: false,
         commentText: '',
-        ticket: TicketDetail(
-          id: state.ticket!.id,
-          title: state.ticket!.title,
-          description: state.ticket!.description,
-          status: state.ticket!.status,
-          priority: state.ticket!.priority,
-          category: state.ticket!.category,
-          createdAt: state.ticket!.createdAt,
-          reporterName: state.ticket!.reporterName,
-          assigneeName: state.ticket!.assigneeName,
-          attachmentUrls: state.ticket!.attachmentUrls,
-          comments: updatedComments,
+        ticket: _rebuildTicket(
+          comments: [...state.ticket!.comments, newComment],
         ),
       );
     } catch (e) {
@@ -258,33 +240,60 @@ class TicketDetailNotifier extends StateNotifier<TicketDetailState> {
     }
   }
 
+  // Admin assign helpdesk → status otomatis jadi in_progress
+  Future<void> assignTicket(HelpdeskAgent agent) async {
+    if (state.isAssigning || state.ticket == null) return;
+    state = state.copyWith(isAssigning: true);
+
+    final isUnassign = agent.id.isEmpty;
+
+    try {
+      await _supabase
+          .from('tickets')
+          .update({
+            'assignee_id': isUnassign ? null : agent.id,
+            // Otomatis ubah status sesuai alur
+            'status': isUnassign ? 'open' : 'in_progress',
+          })
+          .eq('id', ticketId);
+
+      state = state.copyWith(
+        isAssigning: false,
+        ticket: _rebuildTicket(
+          status: isUnassign ? 'open' : 'in_progress',
+          assigneeName: isUnassign ? null : agent.name,
+          clearAssignee: isUnassign,
+        ),
+      );
+    } catch (e) {
+      print('Gagal menugaskan tiket: $e');
+      state = state.copyWith(isAssigning: false);
+    }
+  }
+
+  // Helpdesk klik Finish → status jadi closed
+  Future<void> finishTicket() async {
+    await _updateStatus('closed');
+  }
+
+  // Dipanggil dari UI (bottom sheet update status admin/helpdesk)
   Future<void> updateStatus(String newStatus) async {
+    await _updateStatus(newStatus);
+  }
+
+  Future<void> _updateStatus(String newStatus) async {
     if (state.isUpdatingStatus || state.ticket == null) return;
     state = state.copyWith(isUpdatingStatus: true);
 
     try {
-      // Update di Supabase
       await _supabase
           .from('tickets')
           .update({'status': newStatus})
           .eq('id', ticketId);
 
-      // Update di UI local
       state = state.copyWith(
         isUpdatingStatus: false,
-        ticket: TicketDetail(
-          id: state.ticket!.id,
-          title: state.ticket!.title,
-          description: state.ticket!.description,
-          status: newStatus,
-          priority: state.ticket!.priority,
-          category: state.ticket!.category,
-          createdAt: state.ticket!.createdAt,
-          reporterName: state.ticket!.reporterName,
-          assigneeName: state.ticket!.assigneeName,
-          attachmentUrls: state.ticket!.attachmentUrls,
-          comments: state.ticket!.comments,
-        ),
+        ticket: _rebuildTicket(status: newStatus),
       );
     } catch (e) {
       print('Gagal update status: $e');
@@ -292,38 +301,27 @@ class TicketDetailNotifier extends StateNotifier<TicketDetailState> {
     }
   }
 
-  Future<void> assignTicket(HelpdeskAgent agent) async {
-    if (state.isAssigning || state.ticket == null) return;
-    state = state.copyWith(isAssigning: true);
-
-    try {
-      // Update di Supabase
-      await _supabase
-          .from('tickets')
-          .update({'assignee_id': agent.id})
-          .eq('id', ticketId);
-
-      // Update di UI local
-      state = state.copyWith(
-        isAssigning: false,
-        ticket: TicketDetail(
-          id: state.ticket!.id,
-          title: state.ticket!.title,
-          description: state.ticket!.description,
-          status: state.ticket!.status,
-          priority: state.ticket!.priority,
-          category: state.ticket!.category,
-          createdAt: state.ticket!.createdAt,
-          reporterName: state.ticket!.reporterName,
-          assigneeName: agent.name,
-          attachmentUrls: state.ticket!.attachmentUrls,
-          comments: state.ticket!.comments,
-        ),
-      );
-    } catch (e) {
-      print('Gagal menugaskan tiket: $e');
-      state = state.copyWith(isAssigning: false);
-    }
+  // Helper rebuild TicketDetail tanpa duplikasi kode
+  TicketDetail _rebuildTicket({
+    String? status,
+    String? assigneeName,
+    bool clearAssignee = false,
+    List<TicketComment>? comments,
+  }) {
+    final t = state.ticket!;
+    return TicketDetail(
+      id: t.id,
+      title: t.title,
+      description: t.description,
+      status: status ?? t.status,
+      priority: t.priority,
+      category: t.category,
+      createdAt: t.createdAt,
+      reporterName: t.reporterName,
+      assigneeName: clearAssignee ? null : (assigneeName ?? t.assigneeName),
+      attachmentUrls: t.attachmentUrls,
+      comments: comments ?? t.comments,
+    );
   }
 }
 

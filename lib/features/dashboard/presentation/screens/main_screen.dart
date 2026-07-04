@@ -5,6 +5,7 @@ import 'dashboard_screen.dart';
 import '../../../tickets/presentation/screens/ticket_list_screen.dart';
 import '../../../../core/providers/navigation_provider.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
+import '../../../tickets/presentation/screens/tracking_screen.dart';
 
 class MainScreen extends ConsumerWidget {
   const MainScreen({super.key});
@@ -17,6 +18,7 @@ class MainScreen extends ConsumerWidget {
     final List<Widget> screens = [
       const DashboardScreen(),
       const TicketListScreen(),
+      const TrackingScreen(),
       const ProfileScreen(),
     ];
 
@@ -47,6 +49,12 @@ class MainScreen extends ConsumerWidget {
             BottomNavigationBarItem(
               icon: Icon(Icons.confirmation_number_rounded),
               label: 'Tiket',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(
+                Icons.timeline_rounded,
+              ),
+              label: 'Tracking',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.person_rounded),
