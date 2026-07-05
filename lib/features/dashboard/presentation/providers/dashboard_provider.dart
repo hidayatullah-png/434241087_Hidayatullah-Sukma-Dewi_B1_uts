@@ -28,8 +28,6 @@ class DashboardData {
 // -- Repository --
 
 abstract class DashboardRepository {
-  // 'user' hanya lihat tiket miliknya sendiri,
-  // 'admin'/'helpdesk' lihat semua tiket.
   Future<DashboardData> getDashboardData({required String role});
 }
 
@@ -37,26 +35,28 @@ class DashboardRepositoryImpl implements DashboardRepository {
   @override
   Future<DashboardData> getDashboardData({required String role}) async {
     final supabase = Supabase.instance.client;
+    final currentUserId = supabase.auth.currentUser?.id;
 
     try {
       var query = supabase
           .from('tickets')
           .select(
-            'id, title, description, status, created_at, user_id, assignee:users!tickets_assignee_id_fkey(name)',
+            'id, title, description, status, created_at, '
+            'assignee:users!tickets_assignee_id_fkey(name)',
           );
 
-      // User biasa hanya boleh lihat tiket miliknya sendiri.
-      // Admin & helpdesk tetap lihat semua tiket (tanpa filter tambahan).
       if (role == 'user') {
-        final userId = supabase.auth.currentUser?.id;
-        if (userId == null) {
-          throw Exception('User belum login');
-        }
-        query = query.eq('user_id', userId);
+        // User: hanya tiket milik sendiri
+        if (currentUserId == null) throw Exception('User belum login');
+        query = query.eq('user_id', currentUserId);
+      } else if (role == 'helpdesk') {
+        // Helpdesk: hanya tiket yang di-assign ke dia
+        if (currentUserId == null) throw Exception('User belum login');
+        query = query.eq('assignee_id', currentUserId);
       }
+      // Admin: semua tiket tanpa filter tambahan
 
       final response = await query.order('created_at', ascending: false);
-
       final List<dynamic> rawTickets = response;
 
       int open = 0;
@@ -67,7 +67,6 @@ class DashboardRepositoryImpl implements DashboardRepository {
 
       for (var row in rawTickets) {
         final status = row['status'] as String;
-
         if (status == 'open') open++;
         if (status == 'in_progress') inProgress++;
         if (status == 'resolved') resolved++;
@@ -89,13 +88,25 @@ class DashboardRepositoryImpl implements DashboardRepository {
         }
       }
 
+      // Ambil jumlah notifikasi belum dibaca milik user yang sedang login.
+      // Ini tidak tergantung role tiket — notifikasi memang personal per akun.
+      int unreadNotifCount = 0;
+      if (currentUserId != null) {
+        final notifResponse = await supabase
+            .from('notifications')
+            .select('id')
+            .eq('user_id', currentUserId)
+            .eq('is_read', false);
+        unreadNotifCount = (notifResponse as List).length;
+      }
+
       return DashboardData(
         totalTickets: rawTickets.length,
         openTickets: open,
         inProgressTickets: inProgress,
         resolvedTickets: resolved,
-        unassignedTickets: role == 'user' ? 0 : unassigned,
-        unreadNotifications: 2,
+        unassignedTickets: role == 'admin' ? unassigned : 0,
+        unreadNotifications: unreadNotifCount,
         recentTickets: recentList,
       );
     } catch (e) {

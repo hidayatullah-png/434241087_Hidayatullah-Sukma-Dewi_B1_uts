@@ -23,8 +23,7 @@ class NotificationScreen extends ConsumerWidget {
             if (state.unreadCount > 0) ...[
               const SizedBox(width: 8),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: AppColors.wrnBtsPurple,
                   borderRadius: BorderRadius.circular(12),
@@ -43,7 +42,6 @@ class NotificationScreen extends ConsumerWidget {
         ),
         centerTitle: false,
         actions: [
-          // Mark all as read
           if (state.unreadCount > 0)
             TextButton(
               onPressed: notifier.markAllAsRead,
@@ -59,54 +57,49 @@ class NotificationScreen extends ConsumerWidget {
           const SizedBox(width: 4),
         ],
       ),
-
       body: state.isLoading
           ? Center(child: CircularProgressIndicator(color: cs.primary))
           : state.error != null
-              ? _ErrorState(
-                  message: state.error!,
-                  onRetry: notifier.refresh,
-                )
-              : state.notifications.isEmpty
-                  ? _EmptyState(cs: cs, theme: theme)
-                  : RefreshIndicator(
-                      color: cs.primary,
-                      onRefresh: notifier.refresh,
-                      child: ListView.separated(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        itemCount: state.notifications.length,
-                        separatorBuilder: (_, __) => Divider(
-                          height: 1,
-                          indent: 70,
-                          color: isDark
-                              ? AppColors.wrnShapePurple.withOpacity(0.2)
-                              : cs.outlineVariant.withOpacity(0.3),
-                        ),
-                        itemBuilder: (context, i) {
-                          final notif = state.notifications[i];
-                          return _NotificationTile(
-                            notification: notif,
-                            isDark: isDark,
-                            cs: cs,
-                            theme: theme,
-                            onTap: () {
-                              notifier.markAsRead(notif.id);
-                              // Navigate ke detail tiket
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => TicketDetailScreen(
-                                    ticketId: notif.ticketId,
-                                  ),
-                                ),
-                              );
-                            },
-                            onDismissed: () =>
-                                notifier.deleteNotification(notif.id),
-                          );
-                        },
-                      ),
-                    ),
+          ? _ErrorState(message: state.error!, onRetry: notifier.refresh)
+          : state.notifications.isEmpty
+          ? _EmptyState(cs: cs, theme: theme)
+          : RefreshIndicator(
+              color: cs.primary,
+              onRefresh: notifier.refresh,
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                itemCount: state.notifications.length,
+                separatorBuilder: (_, __) => Divider(
+                  height: 1,
+                  indent: 70,
+                  color: isDark
+                      ? AppColors.wrnShapePurple.withOpacity(0.2)
+                      : cs.outlineVariant.withOpacity(0.3),
+                ),
+                itemBuilder: (context, i) {
+                  final notif = state.notifications[i];
+                  return _NotificationTile(
+                    notification: notif,
+                    isDark: isDark,
+                    cs: cs,
+                    theme: theme,
+                    onTap: () {
+                      notifier.markAsRead(notif.id);
+                      if (notif.ticketId.isNotEmpty) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                TicketDetailScreen(ticketId: notif.ticketId),
+                          ),
+                        );
+                      }
+                    },
+                    onDismissed: () => notifier.deleteNotification(notif.id),
+                  );
+                },
+              ),
+            ),
     );
   }
 }
@@ -151,12 +144,11 @@ class _NotificationTile extends StatelessWidget {
           color: isUnread
               ? AppColors.wrnBtsPurple.withOpacity(isDark ? 0.07 : 0.04)
               : Colors.transparent,
-          padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Icon ──
+              // Icon
               Container(
                 width: 42,
                 height: 42,
@@ -169,7 +161,7 @@ class _NotificationTile extends StatelessWidget {
 
               const SizedBox(width: 12),
 
-              // ── Content ──
+              // Content
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -220,9 +212,11 @@ class _NotificationTile extends StatelessWidget {
                     // Waktu + tiket badge
                     Row(
                       children: [
-                        Icon(Icons.access_time_rounded,
-                            size: 11,
-                            color: cs.onSurface.withOpacity(0.4)),
+                        Icon(
+                          Icons.access_time_rounded,
+                          size: 11,
+                          color: cs.onSurface.withOpacity(0.4),
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           notification.createdAt,
@@ -231,33 +225,39 @@ class _NotificationTile extends StatelessWidget {
                             color: cs.onSurface.withOpacity(0.45),
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: style.color.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '#${notification.ticketId}',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: style.color,
+                        if (notification.ticketId.isNotEmpty) ...[
+                          const SizedBox(width: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: style.color.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '#${notification.ticketId.substring(0, 8)}',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: style.color,
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ],
                 ),
               ),
 
-              // Chevron
               const SizedBox(width: 4),
-              Icon(Icons.chevron_right,
-                  size: 16, color: cs.onSurface.withOpacity(0.25)),
+              Icon(
+                Icons.chevron_right,
+                size: 16,
+                color: cs.onSurface.withOpacity(0.25),
+              ),
             ],
           ),
         ),
@@ -265,41 +265,34 @@ class _NotificationTile extends StatelessWidget {
     );
   }
 
-  _NotifStyle _resolveStyle(NotificationType type) {
+  _NotifStyle _resolveStyle(String type) {
     switch (type) {
-      case NotificationType.statusUpdate:
+      case 'assigned':
+        return _NotifStyle(Icons.person_add_outlined, AppColors.wrnShapeRose);
+      case 'newComment':
         return _NotifStyle(
-          icon: Icons.autorenew_rounded,
-          color: AppColors.wrnBtsPurple,
+          Icons.chat_bubble_outline_rounded,
+          AppColors.wrnLightPurple,
         );
-      case NotificationType.newComment:
+      case 'newTicket':
         return _NotifStyle(
-          icon: Icons.chat_bubble_outline_rounded,
-          color: AppColors.wrnLightPurple,
+          Icons.confirmation_number_outlined,
+          const Color(0xFF4CAF50),
         );
-      case NotificationType.assigned:
-        return _NotifStyle(
-          icon: Icons.person_add_outlined,
-          color: AppColors.wrnShapeRose,
-        );
-      case NotificationType.newTicket:
-        return _NotifStyle(
-          icon: Icons.confirmation_number_outlined,
-          color: const Color(0xFF4CAF50),
-        );
+      case 'statusUpdate':
+      default:
+        return _NotifStyle(Icons.autorenew_rounded, AppColors.wrnBtsPurple);
     }
   }
 }
 
-// ── Helper model ───────────────────────────────────────────────
-
 class _NotifStyle {
   final IconData icon;
   final Color color;
-  const _NotifStyle({required this.icon, required this.color});
+  const _NotifStyle(this.icon, this.color);
 }
 
-// ── Empty & Error States ───────────────────────────────────────
+// ── Empty & Error ──────────────────────────────────────────────
 
 class _EmptyState extends StatelessWidget {
   final ColorScheme cs;
@@ -312,8 +305,11 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.notifications_none_rounded,
-              size: 64, color: cs.onSurface.withOpacity(0.2)),
+          Icon(
+            Icons.notifications_none_rounded,
+            size: 64,
+            color: cs.onSurface.withOpacity(0.2),
+          ),
           const SizedBox(height: 16),
           Text(
             'Tidak ada notifikasi',
@@ -351,7 +347,9 @@ class _ErrorState extends StatelessWidget {
           Text(message),
           const SizedBox(height: 16),
           FilledButton.tonal(
-              onPressed: onRetry, child: const Text('Coba Lagi')),
+            onPressed: onRetry,
+            child: const Text('Coba Lagi'),
+          ),
         ],
       ),
     );

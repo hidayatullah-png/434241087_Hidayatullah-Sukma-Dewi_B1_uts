@@ -39,8 +39,7 @@ extension TicketFilterLabel on TicketFilter {
   }
 }
 
-// -- Pagination State ---
-// (SAMA PERSIS, TIDAK DIUBAH)
+// -- Pagination State --
 
 class TicketListState {
   final List<Ticket> tickets;
@@ -85,14 +84,12 @@ class TicketListState {
   }
 }
 
-// -- Notifier ---
+// -- Notifier --
 
-// 1. Mengubah StateNotifier menjadi Notifier untuk Riverpod v3
 class TicketListNotifier extends Notifier<TicketListState> {
   final _supabase = Supabase.instance.client;
   static const int _perPage = 8;
 
-  // 2. Menggunakan build()
   @override
   TicketListState build() {
     Future.microtask(() => fetchTickets());
@@ -110,41 +107,42 @@ class TicketListNotifier extends Notifier<TicketListState> {
     );
 
     try {
-      // a. Ambil Role pengguna saat ini untuk memfilter data
       final authState = ref.read(authProvider);
-      final isRegularUser = authState.role == 'user';
       final currentUserId = _supabase.auth.currentUser?.id;
 
-      // b. Bangun Query dasar (HANYA select, JANGAN pakai .order dulu)
       var query = _supabase
           .from('tickets')
           .select(
-            'id, title, description, status, created_at, users!tickets_assignee_id_fkey(name)',
+            'id, title, description, status, created_at, '
+            'assignee:users!tickets_assignee_id_fkey(name)',
           );
 
-      // c. Terapkan Filter (Harus dilakukan sebelum order/range)
+      // Filter berdasarkan status (chip filter)
       if (activeFilter.apiValue != null) {
         query = query.eq('status', activeFilter.apiValue!);
       }
 
-      if (isRegularUser && currentUserId != null) {
+      // Filter berdasarkan role:
+      // - user     → hanya tiket milik sendiri (user_id)
+      // - helpdesk → hanya tiket yang di-assign ke dia (assignee_id)
+      // - admin    → semua tiket tanpa filter tambahan
+      if (authState.role == 'user' && currentUserId != null) {
         query = query.eq('user_id', currentUserId);
+      } else if (authState.role == 'helpdesk' && currentUserId != null) {
+        query = query.eq('assignee_id', currentUserId);
       }
 
-      // d. Terapkan Sorting, Pagination, dan Count sekaligus di bagian akhir
       final start = (page - 1) * _perPage;
       final end = start + _perPage - 1;
 
       final response = await query
-          .order('created_at', ascending: false) // Pindahkan order ke sini
+          .order('created_at', ascending: false)
           .range(start, end)
           .count(CountOption.exact);
 
-      // Ambil total data untuk menghitung total halaman
       final count = response.count;
       final totalPages = (count / _perPage).ceil().clamp(1, 999);
 
-      // e. Mapping hasil database ke Model lokal
       final List<dynamic> data = response.data;
       final List<Ticket> loadedTickets = data.map((row) {
         return Ticket(
@@ -153,7 +151,7 @@ class TicketListNotifier extends Notifier<TicketListState> {
           description: row['description'] ?? '',
           status: row['status'] ?? 'open',
           createdAt: row['created_at'].toString().substring(0, 10),
-          assigneeName: row['users']?['name'],
+          assigneeName: row['assignee']?['name'],
         );
       }).toList();
 
@@ -194,9 +192,8 @@ class TicketListNotifier extends Notifier<TicketListState> {
   }
 }
 
-// -- Provider ---
+// -- Provider --
 
-// 3. Mengubah StateNotifierProvider menjadi NotifierProvider
 final ticketListProvider =
     NotifierProvider<TicketListNotifier, TicketListState>(
       () => TicketListNotifier(),

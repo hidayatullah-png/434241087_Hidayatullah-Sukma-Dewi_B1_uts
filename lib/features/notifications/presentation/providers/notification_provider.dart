@@ -1,15 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 // ── Model ──────────────────────────────────────────────────────
-
-enum NotificationType { statusUpdate, newComment, assigned, newTicket }
 
 class AppNotification {
   final String id;
   final String title;
   final String message;
-  final NotificationType type;
+  final String type;
   final String ticketId;
   final String createdAt;
   final bool isRead;
@@ -33,10 +32,20 @@ class AppNotification {
     createdAt: createdAt,
     isRead: isRead ?? this.isRead,
   );
+
+  factory AppNotification.fromJson(Map<String, dynamic> json) =>
+      AppNotification(
+        id: json['id'].toString(),
+        title: json['title'] ?? '',
+        message: json['message'] ?? '',
+        type: json['type'] ?? '',
+        ticketId: json['ticket_id']?.toString() ?? '',
+        createdAt: json['created_at'].toString().substring(0, 16),
+        isRead: json['is_read'] ?? false,
+      );
 }
 
 // ── State ──────────────────────────────────────────────────────
-// (SAMA PERSIS, TIDAK DIUBAH)
 
 class NotificationState {
   final List<AppNotification> notifications;
@@ -66,58 +75,33 @@ class NotificationState {
 
 // ── Notifier ───────────────────────────────────────────────────
 
-// 1. Ubah StateNotifier menjadi Notifier
-class NotificationNotifier extends Notifier<NotificationState> {
+class NotificationNotifier extends StateNotifier<NotificationState> {
   final _supabase = Supabase.instance.client;
+  RealtimeChannel? _channel;
 
-  // 2. build() sebagai pengganti constructor
-  @override
-  NotificationState build() {
-    // Jalankan fetch setelah inisialisasi state selesai
-    Future.microtask(() => fetchNotifications());
-    return const NotificationState();
+  NotificationNotifier() : super(const NotificationState()) {
+    fetchNotifications();
+    _subscribeRealtime();
   }
 
-  // Helper untuk konversi tipe dari Database ke Enum
-  NotificationType _parseType(String typeStr) {
-    switch (typeStr) {
-      case 'statusUpdate': return NotificationType.statusUpdate;
-      case 'newComment': return NotificationType.newComment;
-      case 'assigned': return NotificationType.assigned;
-      case 'newTicket': return NotificationType.newTicket;
-      default: return NotificationType.statusUpdate;
-    }
-  }
-
+  // Ambil notifikasi dari Supabase
   Future<void> fetchNotifications() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) throw Exception('User not logged in');
+      if (userId == null) throw Exception('User belum login');
 
-      // Ambil notifikasi khusus untuk user yang sedang login
       final response = await _supabase
           .from('notifications')
           .select()
           .eq('user_id', userId)
           .order('created_at', ascending: false);
 
-      final List<AppNotification> loadedNotifications = response.map((data) {
-        return AppNotification(
-          id: data['id'].toString(),
-          title: data['title'],
-          message: data['message'],
-          type: _parseType(data['type']),
-          ticketId: data['ticket_id'].toString(),
-          createdAt: data['created_at'].toString().substring(0, 10), // Format waktu sementara
-          isRead: data['is_read'],
-        );
-      }).toList();
+      final notifications = (response as List)
+          .map((n) => AppNotification.fromJson(n))
+          .toList();
 
-      state = state.copyWith(
-        isLoading: false,
-        notifications: loadedNotifications,
-      );
+      state = state.copyWith(notifications: notifications, isLoading: false);
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -126,65 +110,100 @@ class NotificationNotifier extends Notifier<NotificationState> {
     }
   }
 
+  // Subscribe Supabase Realtime — listen INSERT baru di tabel notifications
+  void _subscribeRealtime() {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+
+    _channel = _supabase
+        .channel('notifications:$userId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'notifications',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: userId,
+          ),
+          callback: (payload) {
+            // Notif baru masuk — tambahkan ke list paling atas
+            final newNotif = AppNotification.fromJson(payload.newRecord);
+            state = state.copyWith(
+              notifications: [newNotif, ...state.notifications],
+            );
+          },
+        )
+        .subscribe();
+  }
+
+  // Mark satu notifikasi sebagai sudah dibaca
   Future<void> markAsRead(String id) async {
     try {
-      // Update di Supabase
       await _supabase
           .from('notifications')
           .update({'is_read': true})
           .eq('id', id);
 
-      // Update di local UI
       final updated = state.notifications.map((n) {
         return n.id == id ? n.copyWith(isRead: true) : n;
       }).toList();
       state = state.copyWith(notifications: updated);
     } catch (e) {
-      print('Gagal update status baca: $e');
+      print('Gagal mark as read: $e');
     }
   }
 
+  // Mark semua sebagai sudah dibaca
   Future<void> markAllAsRead() async {
     try {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return;
 
-      // Update semua milik user ini di Supabase
       await _supabase
           .from('notifications')
           .update({'is_read': true})
           .eq('user_id', userId)
           .eq('is_read', false);
 
-      // Update di local UI
       final updated = state.notifications
           .map((n) => n.copyWith(isRead: true))
           .toList();
       state = state.copyWith(notifications: updated);
     } catch (e) {
-      print('Gagal menandai semua sudah dibaca: $e');
+      print('Gagal mark all as read: $e');
     }
   }
 
+  // Hapus notifikasi
   Future<void> deleteNotification(String id) async {
     try {
-      // Hapus dari Supabase
       await _supabase.from('notifications').delete().eq('id', id);
-
-      // Hapus dari local UI
       final updated = state.notifications.where((n) => n.id != id).toList();
       state = state.copyWith(notifications: updated);
     } catch (e) {
-      print('Gagal menghapus notifikasi: $e');
+      print('Gagal hapus notifikasi: $e');
     }
   }
 
   Future<void> refresh() => fetchNotifications();
+
+  @override
+  void dispose() {
+    // Unsubscribe saat provider di-dispose
+    _channel?.unsubscribe();
+    super.dispose();
+  }
 }
 
 // ── Provider ───────────────────────────────────────────────────
 
-// 3. Ubah StateNotifierProvider menjadi NotifierProvider
-final notificationProvider = NotifierProvider<NotificationNotifier, NotificationState>(() {
-  return NotificationNotifier();
+final notificationProvider =
+    StateNotifierProvider<NotificationNotifier, NotificationState>(
+      (ref) => NotificationNotifier(),
+    );
+
+// Provider khusus untuk unread count — dipakai di bell icon
+final unreadCountProvider = Provider<int>((ref) {
+  return ref.watch(notificationProvider).unreadCount;
 });

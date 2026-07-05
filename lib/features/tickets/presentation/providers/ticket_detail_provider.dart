@@ -1,6 +1,7 @@
+// lib/features/tickets/presentation/providers/ticket_detail_provider.dart
+
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../../../core/utils/date_formatter.dart';
 
 // -- Helpdesk Agents --
 
@@ -159,17 +160,16 @@ class TicketDetailNotifier extends StateNotifier<TicketDetailState> {
           .eq('ticket_id', ticketId)
           .order('created_at', ascending: true);
 
-      final List<TicketComment> loadedComments = (commentsResponse as List).map(
-        (c) {
-          return TicketComment(
-            id: c['id'].toString(),
-            authorName: c['users']['name'] ?? 'User tidak diketahui',
-            authorRole: c['users']['role'] ?? 'user',
-            message: c['message'],
-            createdAt: DateFormatter.formatDateTime(c['created_at'].toString()),
-          );
-        },
-      ).toList();
+      final List<TicketComment> loadedComments =
+          (commentsResponse as List).map((c) {
+        return TicketComment(
+          id: c['id'].toString(),
+          authorName: c['users']['name'] ?? 'User tidak diketahui',
+          authorRole: c['users']['role'] ?? 'user',
+          message: c['message'],
+          createdAt: c['created_at'].toString().substring(0, 16),
+        );
+      }).toList();
 
       state = state.copyWith(
         isLoading: false,
@@ -180,9 +180,7 @@ class TicketDetailNotifier extends StateNotifier<TicketDetailState> {
           status: response['status'] ?? 'open',
           priority: response['priority'] ?? 'medium',
           category: response['category'] ?? 'other',
-          createdAt: DateFormatter.formatDateTime(
-            response['created_at'].toString(),
-          ),
+          createdAt: response['created_at'].toString().substring(0, 16),
           reporterName: response['reporter']?['name'] ?? 'Unknown',
           assigneeName: response['assignee']?['name'],
           attachmentUrls: const [],
@@ -213,7 +211,11 @@ class TicketDetailNotifier extends StateNotifier<TicketDetailState> {
 
       final response = await _supabase
           .from('ticket_comments')
-          .insert({'ticket_id': ticketId, 'user_id': userId, 'message': text})
+          .insert({
+            'ticket_id': ticketId,
+            'user_id': userId,
+            'message': text,
+          })
           .select('id, created_at')
           .single();
 
@@ -222,9 +224,7 @@ class TicketDetailNotifier extends StateNotifier<TicketDetailState> {
         authorName: authorName,
         authorRole: authorRole,
         message: text,
-        createdAt: DateFormatter.formatDateTime(
-          response['created_at'].toString(),
-        ),
+        createdAt: response['created_at'].toString().substring(0, 16),
       );
 
       state = state.copyWith(
@@ -248,14 +248,11 @@ class TicketDetailNotifier extends StateNotifier<TicketDetailState> {
     final isUnassign = agent.id.isEmpty;
 
     try {
-      await _supabase
-          .from('tickets')
-          .update({
-            'assignee_id': isUnassign ? null : agent.id,
-            // Otomatis ubah status sesuai alur
-            'status': isUnassign ? 'open' : 'in_progress',
-          })
-          .eq('id', ticketId);
+      await _supabase.from('tickets').update({
+        'assignee_id': isUnassign ? null : agent.id,
+        // Otomatis ubah status sesuai alur
+        'status': isUnassign ? 'open' : 'in_progress',
+      }).eq('id', ticketId);
 
       state = state.copyWith(
         isAssigning: false,
@@ -276,11 +273,6 @@ class TicketDetailNotifier extends StateNotifier<TicketDetailState> {
     await _updateStatus('closed');
   }
 
-  // Dipanggil dari UI (bottom sheet update status admin/helpdesk)
-  Future<void> updateStatus(String newStatus) async {
-    await _updateStatus(newStatus);
-  }
-
   Future<void> _updateStatus(String newStatus) async {
     if (state.isUpdatingStatus || state.ticket == null) return;
     state = state.copyWith(isUpdatingStatus: true);
@@ -298,6 +290,17 @@ class TicketDetailNotifier extends StateNotifier<TicketDetailState> {
     } catch (e) {
       print('Gagal update status: $e');
       state = state.copyWith(isUpdatingStatus: false);
+    }
+  }
+
+  // Admin delete tiket
+  Future<bool> deleteTicket() async {
+    try {
+      await _supabase.from('tickets').delete().eq('id', ticketId);
+      return true;
+    } catch (e) {
+      print('Gagal hapus tiket: $e');
+      return false;
     }
   }
 
@@ -329,5 +332,5 @@ class TicketDetailNotifier extends StateNotifier<TicketDetailState> {
 
 final ticketDetailProvider = StateNotifierProvider.autoDispose
     .family<TicketDetailNotifier, TicketDetailState, String>(
-      (ref, ticketId) => TicketDetailNotifier(ticketId),
-    );
+  (ref, ticketId) => TicketDetailNotifier(ticketId),
+);

@@ -80,6 +80,78 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
     );
   }
 
+  void _showDeleteConfirm() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppColors.wrnDarkInput : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Hapus Tiket?',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'Tiket yang dihapus tidak dapat dikembalikan. '
+          'Semua komentar dan lampiran terkait juga akan terhapus.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Batal',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+              ),
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final success = await ref
+                  .read(ticketDetailProvider(widget.ticketId).notifier)
+                  .deleteTicket();
+              if (!mounted) return;
+              if (success) {
+                Navigator.pop(context); // kembali ke list tiket
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Text('Tiket berhasil dihapus'),
+                    backgroundColor: AppColors.wrnBtsPurple,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Text('Gagal menghapus tiket'),
+                    backgroundColor: const Color(0xFFCF6679),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.delete_outline, size: 16),
+            label: const Text('Hapus'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFCF6679),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showAssignSheet(TicketDetail ticket, List<HelpdeskAgent> agents) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = Theme.of(context).colorScheme;
@@ -333,6 +405,13 @@ class _TicketDetailScreenState extends ConsumerState<TicketDetailScreen>
                     ),
                   ),
 
+          // Delete — admin only
+          if (auth.role == 'admin' && detailState.ticket != null)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Color(0xFFCF6679)),
+              tooltip: 'Hapus Tiket',
+              onPressed: () => _showDeleteConfirm(),
+            ),
           const SizedBox(width: 4),
         ],
         bottom: TabBar(
