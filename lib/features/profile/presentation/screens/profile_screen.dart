@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState;
 import '../../../../../../core/theme/app_colors.dart';
 import '../../../../../../core/theme/theme_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../settings/presentation/screens/setting_screen.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -114,7 +115,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           backgroundColor: isDark ? AppColors.wrnDarkInput : Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: const Text(
             'Edit Profil',
             style: TextStyle(fontWeight: FontWeight.bold),
@@ -145,7 +148,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 child: Text(
                   'Batal',
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.5),
                   ),
                 ),
               ),
@@ -167,13 +172,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             );
                           }
                           // Update nama & email di tabel users
-                          await _supabase.from('users').update({
-                            'name': newName,
-                            'email': newEmail,
-                          }).eq('id', userId);
+                          await _supabase
+                              .from('users')
+                              .update({'name': newName, 'email': newEmail})
+                              .eq('id', userId);
 
                           // Update Riverpod
-                          ref.read(authProvider.notifier).setUser(
+                          ref
+                              .read(authProvider.notifier)
+                              .setUser(
                                 name: newName,
                                 role: auth.role,
                                 email: newEmail,
@@ -217,7 +224,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   // -- Ganti password dialog --
 
   void _showChangePasswordDialog() {
-    final oldPassController = TextEditingController(); // Info: Supabase tidak wajib mengirim old pass untuk update sesi aktif
+    final oldPassController =
+        TextEditingController(); // Info: Supabase tidak wajib mengirim old pass untuk update sesi aktif
     final newPassController = TextEditingController();
     final confirmPassController = TextEditingController();
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -304,7 +312,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               onPressed: isSaving
                   ? null
                   : () async {
-                      if (newPassController.text != confirmPassController.text) {
+                      if (newPassController.text !=
+                          confirmPassController.text) {
                         setDialogState(
                           () => errorText = 'Konfirmasi password tidak cocok',
                         );
@@ -373,7 +382,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           backgroundColor: isDark ? AppColors.wrnDarkInput : Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: const Text(
             'Keluar?',
             style: TextStyle(fontWeight: FontWeight.bold),
@@ -388,7 +399,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 child: Text(
                   'Batal',
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.5),
                   ),
                 ),
               ),
@@ -400,7 +413,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       try {
                         // 1. Sign out dari server Supabase
                         await _supabase.auth.signOut();
-                        
+
                         if (mounted) {
                           Navigator.pop(ctx); // Tutup dialog
                           // 2. Bersihkan state Riverpod
@@ -668,6 +681,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             // -- Menu section: Lainnya --
             _SectionLabel(text: 'Lainnya', cs: cs, theme: theme),
             const SizedBox(height: 8),
+            const SizedBox(height: 8),
+            _MenuCard(
+              isDark: isDark,
+              cs: cs,
+              children: [
+                _MenuItem(
+                  icon: Icons.settings_outlined,
+                  label: 'Pengaturan',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SettingScreen()),
+                    );
+                  },
+                  isDark: isDark,
+                  cs: cs,
+                  theme: theme,
+                ),
+              ],
+            ),
+
             _MenuCard(
               isDark: isDark,
               cs: cs,

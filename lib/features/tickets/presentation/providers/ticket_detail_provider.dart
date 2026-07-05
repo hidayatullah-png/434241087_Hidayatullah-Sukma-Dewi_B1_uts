@@ -268,9 +268,9 @@ class TicketDetailNotifier extends StateNotifier<TicketDetailState> {
     }
   }
 
-  // Helpdesk klik Finish → status jadi closed
+  // Helpdesk klik Finish → status jadi resolved
   Future<void> finishTicket() async {
-    await _updateStatus('closed');
+    await _updateStatus('resolved');
   }
 
   Future<void> _updateStatus(String newStatus) async {

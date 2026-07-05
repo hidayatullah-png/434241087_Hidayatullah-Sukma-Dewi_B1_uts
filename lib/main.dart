@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:srs_mobile/features/auth/presentation/screens/splash_screen.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
+import 'core/providers/font_size_provider.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
 import 'features/dashboard/presentation/screens/main_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -33,6 +34,7 @@ class MyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeProvider);
+    final fontSize = ref.watch(fontSizeProvider); 
 
     return MaterialApp(
       title: 'E-Ticketing Helpdesk',
@@ -42,9 +44,17 @@ class MyApp extends ConsumerWidget {
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
 
+      // Apply ukuran font ke seluruh app
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(
+          context,
+        ).copyWith(textScaler: TextScaler.linear(fontSize.scale)),
+        child: child!,
+      ),
+
       initialRoute: '/',
       routes: {
-        '/': (context) => const SplashScreen(), // Ganti home dengan rute '/'
+        '/': (context) => const SplashScreen(),
         '/login': (context) => const LoginScreen(),
         '/main': (context) => const MainScreen(),
       },

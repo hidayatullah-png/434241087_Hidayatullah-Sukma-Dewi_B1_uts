@@ -20,7 +20,7 @@ class StatCard extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: accentColor.withOpacity(isDark ? 0.12 : 0.10),
         borderRadius: BorderRadius.circular(16),
@@ -29,9 +29,12 @@ class StatCard extends StatelessWidget {
           width: 1,
         ),
       ),
+      // mainAxisSize.min + tanpa spaceBetween: Column hanya mengambil
+      // ruang sesuai kebutuhan konten, jadi tidak "dipaksa" melebar
+      // dan menyebabkan overflow saat ruang yang tersedia sempit.
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Container(
             padding: const EdgeInsets.all(6),
@@ -39,28 +42,29 @@ class StatCard extends StatelessWidget {
               color: accentColor.withOpacity(0.18),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, size: 18, color: accentColor),
+            child: Icon(icon, size: 16, color: accentColor),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                value,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: accentColor,
-                  height: 1,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: accentColor,
+              height: 1,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withOpacity(0.6),
+              fontWeight: FontWeight.w500,
+              fontSize: 11,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
