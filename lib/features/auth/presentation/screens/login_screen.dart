@@ -40,7 +40,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     // Validasi kosong
     if (email.isEmpty || password.isEmpty) {
       setState(
-        () => _errorMessage = 'Email/Username dan password tidak boleh kosong',
+        () => _errorMessage = 'Email dan password tidak boleh kosong',
       );
       return;
     }
@@ -162,7 +162,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   // Username field
                   _buildInputField(
                     controller: _usernameController,
-                    hint: 'Username / Email',
+                    hint: 'Email',
                     icon: Icons.person_outline,
                   ),
 

@@ -7,6 +7,7 @@ import '../../../../../../core/theme/app_colors.dart';
 import '../../../../../../core/theme/theme_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../settings/presentation/screens/setting_screen.dart';
+import '../../../auth/presentation/screens/user_management_screen.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -676,11 +677,38 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ],
             ),
 
+            // -- Menu section: Administrasi (khusus admin) --
+            if (auth.role == 'admin') ...[
+              const SizedBox(height: 20),
+              _SectionLabel(text: 'Administrasi', cs: cs, theme: theme),
+              const SizedBox(height: 8),
+              _MenuCard(
+                isDark: isDark,
+                cs: cs,
+                children: [
+                  _MenuItem(
+                    icon: Icons.people_outline,
+                    label: 'Kelola Pengguna',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const UserManagementScreen(),
+                        ),
+                      );
+                    },
+                    isDark: isDark,
+                    cs: cs,
+                    theme: theme,
+                  ),
+                ],
+              ),
+            ],
+
             const SizedBox(height: 20),
 
             // -- Menu section: Lainnya --
             _SectionLabel(text: 'Lainnya', cs: cs, theme: theme),
-            const SizedBox(height: 8),
             const SizedBox(height: 8),
             _MenuCard(
               isDark: isDark,
@@ -699,13 +727,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   cs: cs,
                   theme: theme,
                 ),
-              ],
-            ),
-
-            _MenuCard(
-              isDark: isDark,
-              cs: cs,
-              children: [
+                _MenuDivider(cs: cs, isDark: isDark),
                 _MenuItem(
                   icon: Icons.info_outline,
                   label: 'Tentang Aplikasi',
@@ -762,7 +784,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 }
 
 // -- Helper Widgets --
-// (Di bawah ini tidak ada yang diubah sama sekali, tetap murni 100% kode bawaanmu)
 
 class _SectionLabel extends StatelessWidget {
   final String text;
